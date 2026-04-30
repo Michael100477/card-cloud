@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CardGraphic } from "@/components/landing/CardGraphic";
 
 const services = [
   {
@@ -61,34 +62,43 @@ const services = [
 
 export function Hero() {
   return (
-    <section className="bg-navy pt-16 pb-20 sm:pt-20 sm:pb-24">
+    <section className="bg-navy pt-14 pb-20 sm:pt-18 sm:pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Headline block */}
-        <div className="text-center mb-14">
-          <p className="text-sky-highlight text-sm font-semibold uppercase tracking-widest mb-4">
-            All four services in one place
-          </p>
-          <h1 className="text-white text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight tracking-tight mb-5">
-            The smartest home for
-            <br className="hidden sm:block" /> your sports cards.
-          </h1>
-          <p className="text-sky-highlight text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed mb-8">
-            Free collection tracking with live eBay values. Fast cash offers, eBay
-            consignment, and safe trading — all from one platform.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link
-              href="/signup"
-              className="bg-amber text-amber-dark font-semibold px-7 py-3.5 rounded-xl text-base hover:brightness-105 transition-all"
-            >
-              Sign up free
-            </Link>
-            <Link
-              href="#services"
-              className="text-white/80 hover:text-white font-medium px-7 py-3.5 rounded-xl text-base border border-white/20 hover:border-white/40 transition-all"
-            >
-              See how it works
-            </Link>
+
+        {/* Two-column: text left, card graphic right */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center pb-16 lg:pb-20">
+          {/* Left: headline + CTAs */}
+          <div>
+            <p className="text-sky-highlight text-sm font-semibold uppercase tracking-widest mb-4">
+              Sports · Pokémon · Magic · All cards
+            </p>
+            <h1 className="text-white text-4xl sm:text-5xl font-bold leading-tight tracking-tight mb-5">
+              The smartest home for your card collection.
+            </h1>
+            <p className="text-sky-highlight text-lg leading-relaxed mb-8">
+              Track your collection with live eBay values, sell or consign with
+              ease, trade safely — and share every pickup with a community of
+              collectors who actually get it.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link
+                href="/signup"
+                className="bg-amber text-amber-dark font-semibold px-7 py-3.5 rounded-xl text-base hover:brightness-105 transition-all text-center"
+              >
+                Sign up free
+              </Link>
+              <Link
+                href="#services"
+                className="text-white/80 hover:text-white font-medium px-7 py-3.5 rounded-xl text-base border border-white/20 hover:border-white/40 transition-all text-center"
+              >
+                See how it works
+              </Link>
+            </div>
+          </div>
+
+          {/* Right: card fan graphic */}
+          <div className="flex justify-center lg:justify-end">
+            <CardGraphic />
           </div>
         </div>
 

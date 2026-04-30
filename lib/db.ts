@@ -1,4 +1,4 @@
-import { PrismaClient } from "@/app/generated/prisma";
+import { PrismaClient } from "@/app/generated/prisma/client";
 
 // Prevent multiple Prisma instances in development (Next.js hot reload creates new modules)
 const globalForPrisma = globalThis as unknown as {
@@ -8,10 +8,7 @@ const globalForPrisma = globalThis as unknown as {
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
+    accelerateUrl: process.env.DATABASE_URL!,
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;

@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────
+
+enum PlanTier {
+  FREE
+  TRIAL
+  MONTHLY
+  ANNUAL
+}
+
+enum CardStatus {
+  TRACKING
+  OFFER_PENDING
+  OFFER_ACCEPTED
+  CONSIGNED
+  LISTED
+  SOLD
+  TRADE_LISTED
+  IN_TRADE
+}
+
+// ─────────────────────────────────────────
+// Models
+// ─────────────────────────────────────────
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  username         String    @unique
+  displayName      String?
+  passwordHash     String?
+  googleId         String?   @unique
+  appleId          String?   @unique
+
+  planTier         PlanTier  @default(FREE)
+  trialEndsAt      DateTime?
+
+  stripeCustomerId String?   @unique
+  stripeConnectId  String?   @unique
+
+  profilePhoto     String?
+  bio              String?
+  location         String?
+  isPublic         Boolean   @default(false)
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  cards            Card[]
+
+  @@map("users")
+}
+
+model Card {
+  id             String     @id @default(cuid())
+  ownerId        String
+  owner          User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Card identity
+  player         String
+  year           Int
+  manufacturer   String
+  set            String
+  subset         String?
+  cardNumber     String?
+  sport          String?
+  team           String?
+
+  // Grading
+  grade          String?
+  gradeCompany   String?
+  certNumber     String?
+
+  // Condition & photos
+  conditionNotes String?
+  photos         String[]
+
+  // Live value (populated by eBay background job)
+  estimatedValue  Decimal?  @db.Decimal(10, 2)
+  lastValueUpdate DateTime?
+
+  // Acquisition info
+  acquiredDate   DateTime?
+  acquiredPrice  Decimal?  @db.Decimal(10, 2)
+  acquiredSource String?
+
+  // Status across all four services
+  status         CardStatus @default(TRACKING)
+  isPublic       Boolean    @default(false)
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([ownerId])
+  @@map("cards")
+}

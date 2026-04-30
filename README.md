@@ -1,36 +1,116 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# The Card Cloud
 
-## Getting Started
+Sports card tracking, selling, consigning, and trading platform.
 
-First, run the development server:
+Built with Next.js 16, TypeScript, Tailwind CSS v4, and Prisma 6.
+
+---
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) v20 or higher (project uses v24)
+- npm v10 or higher
+
+---
+
+## Local setup
 
 ```bash
+# 1. Clone the repo
+git clone <repo-url>
+cd card-cloud
+
+# 2. Install dependencies
+npm install
+
+# 3. Copy the example env file
+cp .env.example .env
+
+# 4. Start the local database (Prisma manages Postgres — no separate install needed)
+npx prisma dev
+
+# 5. In a second terminal, run the dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3001](http://localhost:3001).
+(Port 3000 is occupied by Docker on the dev machine, so Next.js uses 3001.)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Database
 
-## Learn More
+Prisma 6 includes a built-in local Postgres server — no separate PostgreSQL installation required for development.
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Start the local database (keep running in a separate terminal)
+npx prisma dev
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Generate the Prisma client after any schema change
+npx prisma generate
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Apply schema changes and create a migration
+npx prisma migrate dev --name <describe-change>
 
-## Deploy on Vercel
+# Open Prisma Studio (visual database browser)
+npx prisma studio
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+For a hosted database, replace `DATABASE_URL` in `.env` with a standard `postgresql://` connection string.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Project structure
+
+```
+card-cloud/
+├── app/
+│   ├── layout.tsx          # Root layout — metadata, global CSS
+│   ├── page.tsx            # Landing page composition
+│   └── globals.css         # Brand color tokens (@theme) + base styles
+│
+├── components/
+│   ├── nav/TopNav.tsx      # Site-wide navigation bar
+│   └── landing/
+│       ├── Hero.tsx            # Navy hero + four service path cards
+│       ├── CardGraphic.tsx     # SVG fan of trading cards
+│       ├── CommunityPitch.tsx  # Community value prop + stats
+│       ├── CommunityFeed.tsx   # Social activity feed (collector posts)
+│       ├── ArticleStrip.tsx    # Hobby Desk article previews
+│       └── FooterCTA.tsx       # Navy CTA band + page footer
+│
+├── lib/
+│   ├── db.ts               # Prisma client singleton
+│   └── utils.ts            # cn() class-name helper (clsx + tailwind-merge)
+│
+├── prisma/
+│   └── schema.prisma       # Database models: User, Card
+│
+└── prisma.config.ts        # Prisma database connection config
+```
+
+---
+
+## Brand colors
+
+| Token           | Hex       | Usage                                |
+|-----------------|-----------|--------------------------------------|
+| `navy`          | `#042C53` | Hero sections, nav, dark backgrounds |
+| `brand`         | `#185FA5` | Links, primary buttons, accents      |
+| `amber`         | `#EF9F27` | CTAs on dark/navy backgrounds        |
+| `light-navy`    | `#0C447C` | Hover states on blue elements        |
+| `sky-highlight` | `#85B7EB` | Secondary text on dark backgrounds   |
+| `success`       | `#3B6D11` | Value gains, positive states         |
+| `alert`         | `#A32D2D` | Errors, value losses                 |
+
+> **Rule:** Always use amber buttons on navy backgrounds — never blue on blue.
+
+---
+
+## Environment variables
+
+| Variable       | Description                        |
+|----------------|------------------------------------|
+| `DATABASE_URL` | Prisma Postgres connection string  |
+
+See `.env.example` for the template.

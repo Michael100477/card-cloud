@@ -3,10 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently --names \"db,next\" --prefix-colors \"cyan,green\" \"npx prisma dev\" \"next dev\"",
+    "dev": "concurrently --names \"db,next\" --prefix-colors \"cyan,green\" \"npm run dev:db\" \"npm run dev:app\"",
+    "dev:db": "prisma dev",
+    "dev:app": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "service:start": "pm2 start ecosystem.config.js",
+    "service:stop": "pm2 stop ecosystem.config.js",
+    "service:restart": "pm2 restart ecosystem.config.js",
+    "service:status": "pm2 status",
+    "service:logs": "pm2 logs",
     "db:studio": "npx prisma studio",
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate"

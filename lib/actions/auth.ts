@@ -17,31 +17,36 @@ export async function signUpAction(formData: FormData) {
     return { error: "All fields are required." };
   }
 
-  const existing = await db.user.findFirst({
-    where: { OR: [{ email }, { username }] },
-    select: { email: true, username: true },
-  });
+  try {
+    const existing = await db.user.findFirst({
+      where: { OR: [{ email }, { username }] },
+      select: { email: true, username: true },
+    });
 
-  if (existing?.email === email) {
-    return { error: "An account with that email already exists." };
+    if (existing?.email === email) {
+      return { error: "An account with that email already exists." };
+    }
+    if (existing?.username === username) {
+      return { error: "That username is already taken." };
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await db.user.create({
+      data: {
+        email,
+        username,
+        passwordHash,
+        planTier: "TRIAL",
+        trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+  } catch (error) {
+    console.error("[signUpAction]", error);
+    return { error: "Unable to create account right now. Please try again shortly." };
   }
-  if (existing?.username === username) {
-    return { error: "That username is already taken." };
-  }
 
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  await db.user.create({
-    data: {
-      email,
-      username,
-      passwordHash,
-      planTier: "TRIAL",
-      trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    },
-  });
-
-  // Auto sign-in after registration
+  // Auto sign-in after registration (called outside try so redirect() can throw normally)
   await signIn("credentials", { email, password, redirectTo: "/dashboard" });
 }
 
@@ -57,6 +62,11 @@ export async function loginAction(formData: FormData) {
   } catch (error) {
     if (error instanceof AuthError) {
       return { error: "Invalid email or password." };
+    }
+    // Connectivity / DB errors
+    if (error instanceof Error && !error.message.includes("NEXT_REDIRECT")) {
+      console.error("[loginAction]", error);
+      return { error: "Unable to log in right now. Please try again shortly." };
     }
     throw error; // redirect() throws — let it propagate
   }

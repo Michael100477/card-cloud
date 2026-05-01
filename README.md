@@ -23,18 +23,19 @@ cd card-cloud
 # 2. Install dependencies
 npm install
 
-# 3. Copy the example env file
+# 3. Copy the example env file and fill in your values
 cp .env.example .env
 
-# 4. Start the local database (Prisma manages Postgres — no separate install needed)
-npx prisma dev
-
-# 5. In a second terminal, run the dev server
+# 4. Start everything with one command
 npm run dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001).
-(Port 3000 is occupied by Docker on the dev machine, so Next.js uses 3001.)
+That's it. `npm run dev` starts both the database and the web server together.
+Open [http://localhost:3001](http://localhost:3001) (port 3000 is occupied by Docker on the dev machine).
+
+### What `npm run dev` does
+- **db** — starts a local Prisma Postgres server and applies any pending schema migrations automatically
+- **next** — starts the Next.js development server with hot reload
 
 ---
 

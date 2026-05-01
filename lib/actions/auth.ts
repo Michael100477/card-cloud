@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
+import { sendEmail } from "@/lib/email";
+import { WelcomeEmail } from "@/emails/WelcomeEmail";
+import { PasswordResetEmail } from "@/emails/PasswordResetEmail";
+import * as React from "react";
 
 // ─── Sign up ──────────────────────────────────────────────────────────────────
 
@@ -41,12 +45,23 @@ export async function signUpAction(formData: FormData) {
         trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
+
+    // Send welcome email (non-blocking — don't fail signup if email fails)
+    sendEmail({
+      to: email,
+      subject: "Welcome to The Card Cloud 🎉",
+      react: React.createElement(WelcomeEmail, {
+        username,
+        loginUrl: `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/dashboard`,
+      }),
+    }).catch((err) => console.error("[welcome email]", err));
+
   } catch (error) {
     console.error("[signUpAction]", error);
     return { error: "Unable to create account right now. Please try again shortly." };
   }
 
-  // Auto sign-in after registration (called outside try so redirect() can throw normally)
+  // Auto sign-in after registration (outside try so redirect() throws normally)
   await signIn("credentials", { email, password, redirectTo: "/dashboard" });
 }
 
@@ -63,12 +78,11 @@ export async function loginAction(formData: FormData) {
     if (error instanceof AuthError) {
       return { error: "Invalid email or password." };
     }
-    // Connectivity / DB errors
     if (error instanceof Error && !error.message.includes("NEXT_REDIRECT")) {
       console.error("[loginAction]", error);
       return { error: "Unable to log in right now. Please try again shortly." };
     }
-    throw error; // redirect() throws — let it propagate
+    throw error;
   }
 }
 
@@ -83,11 +97,10 @@ export async function requestPasswordResetAction(formData: FormData) {
   });
 
   if (user) {
-    // Invalidate any existing tokens for this user
     await db.passwordResetToken.deleteMany({ where: { userId: user.id } });
 
     const token     = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
     await db.passwordResetToken.create({
       data: { token, userId: user.id, expiresAt },
@@ -95,8 +108,11 @@ export async function requestPasswordResetAction(formData: FormData) {
 
     const resetUrl = `${process.env.NEXTAUTH_URL ?? "http://localhost:3001"}/reset-password?token=${token}`;
 
-    // Dev: log to console. Production: replace with Postmark email.
-    console.log(`[Password Reset] ${email} → ${resetUrl}`);
+    await sendEmail({
+      to: email,
+      subject: "Reset your Card Cloud password",
+      react: React.createElement(PasswordResetEmail, { resetUrl }),
+    });
   }
 
   // Always return success — never reveal whether the email exists (spec §23)

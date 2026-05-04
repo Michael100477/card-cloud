@@ -140,12 +140,34 @@ export function AddCardForm({ collection }: Props) {
     return null;
   }
 
+  async function uploadFile(file: File): Promise<string> {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? "Upload failed");
+    }
+    return (await res.json()).url as string;
+  }
+
   function doSave(addAnother: boolean) {
     const err = validate();
     if (err) { setError(err); return; }
     setError(""); setSuccessMsg("");
 
     startTransition(async () => {
+      // Upload all photos first, collect URLs
+      const photoUrls: string[] = [];
+      try {
+        if (frontPhoto)      photoUrls.push(await uploadFile(frontPhoto.file));
+        if (backPhoto)       photoUrls.push(await uploadFile(backPhoto.file));
+        for (const p of additionalPhotos) photoUrls.push(await uploadFile(p.file));
+      } catch (uploadErr) {
+        setError(uploadErr instanceof Error ? uploadErr.message : "Photo upload failed.");
+        return;
+      }
+
       const result = await createCardAction({
         player:       form.player,
         year:         Number(form.year),
@@ -162,7 +184,7 @@ export function AddCardForm({ collection }: Props) {
         tags: [...selectedTags, ...customTags],
         conditionNotes: form.conditionNotes || undefined,
         notes:        form.notes         || undefined,
-        photos: [],   // filled once R2 is wired up
+        photos:       photoUrls,
         acquiredDate:   form.acquiredDate  || undefined,
         acquiredPrice:  form.acquiredPrice ? Number(form.acquiredPrice) : undefined,
         acquiredSource: form.acquiredSource || undefined,
@@ -477,7 +499,7 @@ export function AddCardForm({ collection }: Props) {
             </div>
 
             <p className="text-slate-400 text-xs">
-              ⚠ Photos preview locally but won&apos;t be saved until Cloudflare R2 is configured (next step).
+              JPG, PNG, or WEBP · max 10 MB per photo
             </p>
           </Section>
 

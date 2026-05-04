@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { loginAction } from "@/lib/actions/auth";
+import { OAuthButtons } from "@/components/auth/OAuthButtons";
 
 export default function LoginPage() {
   const [showPass, setShowPass]     = useState(false);
@@ -41,14 +42,9 @@ export default function LoginPage() {
         </div>
       )}
 
-      {/* Google OAuth */}
-      <a
-        href="/api/auth/signin/google"
-        className="flex items-center justify-center gap-3 w-full border border-slate-200 rounded-xl py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors mb-5"
-      >
-        <GoogleIcon className="w-5 h-5" />
-        Continue with Google
-      </a>
+      <div className="mb-5">
+        <OAuthButtons />
+      </div>
 
       <div className="flex items-center gap-3 mb-5">
         <div className="flex-1 h-px bg-slate-100" />

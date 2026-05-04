@@ -28,8 +28,9 @@ export interface CardRow {
 type SortField = "player" | "year" | "manufacturer" | "set" | "grade" | "estimatedValue" | "status" | "createdAt";
 type SortDir   = "asc" | "desc";
 
-const SPORT_FILTERS = ["All", "Baseball", "Football", "Basketball", "Hockey", "Soccer", "Pokémon", "Magic", "Other"];
-const TYPE_FILTERS  = ["All", "Graded", "Rookie", "Auto", "Jersey", "Numbered"];
+// Ordered master lists — used to preserve display order when deriving available options
+const ALL_SPORTS = ["Baseball", "Football", "Basketball", "Hockey", "Soccer", "Golf", "Tennis", "Boxing", "MMA", "NASCAR", "Pokémon", "Magic: The Gathering", "Yu-Gi-Oh!", "Other"];
+const ALL_TYPES  = ["Graded", "Rookie", "Auto", "Jersey", "Numbered", "1/1", "Refractor", "Parallel", "Short Print", "Vintage", "Base", "Holo", "Prizm"];
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   TRACKING:       { label: "Tracking",  color: "bg-slate-100 text-slate-600" },
@@ -92,6 +93,22 @@ export function CollectionView({ cards, collectionId }: { cards: CardRow[]; coll
     else { setSortField(field); setSortDir("asc"); }
   }
 
+  // ── Available filters (derived from actual cards in collection) ───────────
+  const availableSports = useMemo(() => {
+    const present = new Set(cards.map(c => c.sport).filter(Boolean));
+    return ["All", ...ALL_SPORTS.filter(s => present.has(s))];
+  }, [cards]);
+
+  const availableTypes = useMemo(() => {
+    const allTags = new Set(cards.flatMap(c => c.tags));
+    const hasGraded = cards.some(c => !!c.grade);
+    const types = ALL_TYPES.filter(t => {
+      if (t === "Graded") return hasGraded;
+      return allTags.has(t);
+    });
+    return types.length > 0 ? ["All", ...types] : ["All"];
+  }, [cards]);
+
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <span className="text-slate-300 ml-1">↕</span>;
     return <span className="text-brand ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>;
@@ -101,9 +118,9 @@ export function CollectionView({ cards, collectionId }: { cards: CardRow[]; coll
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
       {/* Filter + view toggle bar */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-        {/* Sport pills */}
+        {/* Sport pills — only sports present in this collection */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 flex-1">
-          {SPORT_FILTERS.map((s) => (
+          {availableSports.map((s) => (
             <button
               key={s}
               onClick={() => setSportFilter(s)}
@@ -119,9 +136,9 @@ export function CollectionView({ cards, collectionId }: { cards: CardRow[]; coll
           ))}
         </div>
 
-        {/* Type pills */}
+        {/* Type pills — only types/tags present in this collection */}
         <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {TYPE_FILTERS.map((t) => (
+          {availableTypes.map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(t)}

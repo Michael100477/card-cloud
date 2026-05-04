@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { CollectionView } from "@/components/cards/CollectionView";
+import { ValueHistory } from "@/components/collections/ValueHistory";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -13,26 +14,33 @@ export default async function CollectionDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const collection = await db.collection.findUnique({
-    where: { id },
-    include: {
-      _count: { select: { cards: true } },
-      cards: {
-        orderBy: { addedAt: "desc" },
-        include: {
-          card: {
-            select: {
-              id: true, player: true, year: true, manufacturer: true,
-              set: true, subset: true, cardNumber: true, serialNumber: true, sport: true,
-              team: true, grade: true, gradeCompany: true, tags: true,
-              photos: true, estimatedValue: true, status: true,
-              createdAt: true,
+  const [collection, rawSnapshots] = await Promise.all([
+    db.collection.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { cards: true } },
+        cards: {
+          orderBy: { addedAt: "desc" },
+          include: {
+            card: {
+              select: {
+                id: true, player: true, year: true, manufacturer: true,
+                set: true, subset: true, cardNumber: true, serialNumber: true, sport: true,
+                team: true, grade: true, gradeCompany: true, tags: true,
+                photos: true, estimatedValue: true, status: true,
+                createdAt: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    db.collectionSnapshot.findMany({
+      where: { collectionId: id },
+      orderBy: { capturedAt: "asc" },
+      select: { id: true, totalValue: true, cardCount: true, capturedAt: true },
+    }),
+  ]);
 
   if (!collection || collection.ownerId !== session.user.id) notFound();
 
@@ -42,6 +50,18 @@ export default async function CollectionDetailPage({ params }: Props) {
     estimatedValue: card.estimatedValue ? Number(card.estimatedValue) : null,
     createdAt: card.createdAt.toISOString(),
   }));
+
+  const snapshots = rawSnapshots.map(s => ({
+    id:          s.id,
+    totalValue:  Number(s.totalValue),
+    cardCount:   s.cardCount,
+    capturedAt:  s.capturedAt.toISOString(),
+  }));
+
+  // Latest snapshot value for the hero (falls back to summing loaded cards)
+  const latestValue = snapshots.length > 0
+    ? snapshots[snapshots.length - 1].totalValue
+    : cards.reduce((sum, c) => sum + (c.estimatedValue ?? 0), 0);
 
   return (
     <div>
@@ -68,7 +88,9 @@ export default async function CollectionDetailPage({ params }: Props) {
                   {collection._count.cards} {collection._count.cards === 1 ? "card" : "cards"}
                 </span>
                 <span className="text-sky-highlight/40">·</span>
-                <span className="text-sky-highlight/70 text-sm">Est. $—</span>
+                <span className="text-sky-highlight/70 text-sm">
+                  Est. {latestValue > 0 ? `$${latestValue.toLocaleString()}` : "$—"}
+                </span>
                 {collection.isPublic && (
                   <>
                     <span className="text-sky-highlight/40">·</span>
@@ -92,6 +114,11 @@ export default async function CollectionDetailPage({ params }: Props) {
 
       {/* Content */}
       <CollectionView cards={cards} collectionId={id} />
+
+      {/* Value history */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+        <ValueHistory collectionId={id} snapshots={snapshots} />
+      </div>
     </div>
   );
 }

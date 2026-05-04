@@ -135,10 +135,25 @@ model Collection {
   updatedAt   DateTime @updatedAt
 
   cards       CardCollection[]
+  snapshots   CollectionSnapshot[]
 
   @@index([ownerId])
   @@unique([ownerId, slug])
   @@map("collections")
+}
+
+model CollectionSnapshot {
+  id           String     @id @default(cuid())
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  totalValue   Decimal    @db.Decimal(10, 2)
+  cardCount    Int
+
+  capturedAt   DateTime   @default(now())
+
+  @@index([collectionId, capturedAt])
+  @@map("collection_snapshots")
 }
 
 model CardCollection {

@@ -88,6 +88,55 @@ export async function createCardAction(data: CreateCardInput) {
   }
 }
 
+// Re-uses CreateCardInput minus collectionId (collection membership
+// is managed separately; editing doesn't move a card between collections)
+export type UpdateCardInput = Omit<CreateCardInput, "collectionId">;
+
+export async function updateCardAction(cardId: string, data: UpdateCardInput) {
+  const userId = await requireAuth();
+
+  if (!data.player?.trim() || !data.year || !data.manufacturer?.trim() || !data.set?.trim()) {
+    return { error: "Player, year, manufacturer, and set are required." };
+  }
+
+  const existing = await db.card.findUnique({ where: { id: cardId }, select: { ownerId: true } });
+  if (!existing || existing.ownerId !== userId) return { error: "Card not found." };
+
+  try {
+    await db.card.update({
+      where: { id: cardId },
+      data: {
+        player:        data.player.trim(),
+        year:          data.year,
+        manufacturer:  data.manufacturer.trim(),
+        set:           data.set.trim(),
+        subset:        data.subset?.trim()       || null,
+        cardNumber:    data.cardNumber?.trim()   || null,
+        sport:         data.sport                || null,
+        team:          data.team?.trim()         || null,
+        grade:         data.grade?.trim()        || null,
+        gradeCompany:  data.gradeCompany         || null,
+        certNumber:    data.certNumber?.trim()   || null,
+        serialNumber:  data.serialNumber?.trim() || null,
+        tags:          data.tags,
+        conditionNotes: data.conditionNotes?.trim() || null,
+        notes:          data.notes?.trim()          || null,
+        photos:        data.photos,
+        acquiredDate:  data.acquiredDate ? new Date(data.acquiredDate) : null,
+        acquiredPrice: data.acquiredPrice ?? null,
+        acquiredSource: data.acquiredSource || null,
+      },
+    });
+
+    revalidatePath(`/dashboard/cards/${cardId}`);
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err) {
+    console.error("[updateCardAction]", err);
+    return { error: "Failed to save changes. Please try again." };
+  }
+}
+
 export async function deleteCardAction(cardId: string) {
   const userId = await requireAuth();
 

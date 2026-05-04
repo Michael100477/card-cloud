@@ -73,7 +73,6 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
-// 30-minute expiry password reset tokens (spec §23)
 model PasswordResetToken {
   id        String   @id @default(cuid())
   token     String   @unique @default(cuid())
@@ -94,7 +93,7 @@ model User {
   id               String    @id @default(cuid())
   email            String    @unique
   emailVerified    DateTime?
-  username         String?   @unique  // nullable — OAuth users get one auto-generated
+  username         String?   @unique
   displayName      String?
   passwordHash     String?
 
@@ -112,15 +111,46 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  // NextAuth relations
   accounts         Account[]
   sessions         Session[]
-
-  // App relations
   cards            Card[]
+  collections      Collection[]
   passwordResets   PasswordResetToken[]
 
   @@map("users")
+}
+
+model Collection {
+  id          String   @id @default(cuid())
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  slug        String?
+  coverImage  String?
+  isPublic    Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cards       CardCollection[]
+
+  @@index([ownerId])
+  @@unique([ownerId, slug])
+  @@map("collections")
+}
+
+model CardCollection {
+  cardId       String
+  collectionId String
+  addedAt      DateTime @default(now())
+
+  card         Card       @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, collectionId])
+  @@map("card_collections")
 }
 
 model Card {
@@ -128,25 +158,35 @@ model Card {
   ownerId        String
   owner          User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
+  // Identity
   player         String
   year           Int
   manufacturer   String
   set            String
   subset         String?
   cardNumber     String?
+  serialNumber   String?   // print run e.g. "5/10", "/25", "1/1"
   sport          String?
   team           String?
+  notes          String?   // general notes (separate from condition notes)
 
+  // Grading
   grade          String?
   gradeCompany   String?
   certNumber     String?
 
+  // Tags (Rookie, Auto, Jersey, Numbered, etc.)
+  tags           String[]
+
+  // Condition & photos
   conditionNotes String?
   photos         String[]
 
+  // Live value (populated by eBay background job — Phase 2)
   estimatedValue  Decimal?  @db.Decimal(10, 2)
   lastValueUpdate DateTime?
 
+  // Acquisition
   acquiredDate   DateTime?
   acquiredPrice  Decimal?  @db.Decimal(10, 2)
   acquiredSource String?
@@ -156,6 +196,8 @@ model Card {
 
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+
+  collections    CardCollection[]
 
   @@index([ownerId])
   @@map("cards")

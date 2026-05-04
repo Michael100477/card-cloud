@@ -8,7 +8,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [collections, cardCount] = await Promise.all([
+  const [rawCollections, cardCount] = await Promise.all([
     db.collection.findMany({
       where:   { ownerId: session.user.id },
       orderBy: { createdAt: "desc" },
@@ -16,13 +16,27 @@ export default async function DashboardPage() {
         _count: { select: { cards: true } },
         cards: {
           orderBy: { addedAt: "desc" },
-          take: 12,                           // enough for the cover picker
-          include: { card: { select: { photos: true, player: true } } },
+          take: 12,
+          include: {
+            card: { select: { photos: true, player: true, estimatedValue: true } },
+          },
         },
       },
     }),
     db.card.count({ where: { ownerId: session.user.id } }),
   ]);
+
+  // Serialise Prisma Decimal → number before passing to client components
+  const collections = rawCollections.map(col => ({
+    ...col,
+    cards: col.cards.map(cc => ({
+      ...cc,
+      card: {
+        ...cc.card,
+        estimatedValue: cc.card.estimatedValue ? Number(cc.card.estimatedValue) : null,
+      },
+    })),
+  }));
 
   const totalCollections = collections.length;
 

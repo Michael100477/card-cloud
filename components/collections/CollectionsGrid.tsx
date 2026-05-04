@@ -6,7 +6,7 @@ import { CreateCollectionModal } from "./CreateCollectionModal";
 import { setCollectionCoverAction } from "@/lib/actions/collections";
 
 interface CardPreview {
-  card: { photos: string[]; player: string };
+  card: { photos: string[]; player: string; estimatedValue: number | null };
 }
 
 interface CollectionData {
@@ -71,6 +71,10 @@ export function CollectionsGrid({ collections }: { collections: CollectionData[]
 function CollectionCard({ collection: col }: { collection: CollectionData }) {
   const [pickerOpen, setPickerOpen]   = useState(false);
   const [isPending, startTransition]  = useTransition();
+
+  // Total estimated value across loaded cards (null when no values exist yet)
+  const loadedValues = col.cards.map(cc => cc.card.estimatedValue).filter((v): v is number => v !== null);
+  const totalValue   = loadedValues.length > 0 ? loadedValues.reduce((a, b) => a + b, 0) : null;
 
   // Determine which photos are available to choose from
   const photoOptions = col.cards
@@ -172,9 +176,17 @@ function CollectionCard({ collection: col }: { collection: CollectionData }) {
         {col.description && (
           <p className="text-slate-400 text-xs mt-0.5 line-clamp-1">{col.description}</p>
         )}
-        <p className="text-slate-400 text-xs mt-1.5">
-          {col._count.cards} {col._count.cards === 1 ? "card" : "cards"}
-        </p>
+        <div className="flex items-center justify-between mt-1.5">
+          <p className="text-slate-400 text-xs">
+            {col._count.cards} {col._count.cards === 1 ? "card" : "cards"}
+          </p>
+          <p className="text-navy text-xs font-semibold">
+            {totalValue !== null
+              ? `$${totalValue.toLocaleString()}`
+              : <span className="text-slate-300">$—</span>
+            }
+          </p>
+        </div>
       </Link>
     </div>
   );

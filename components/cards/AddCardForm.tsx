@@ -306,6 +306,14 @@ export function AddCardForm({ collection }: Props) {
                 placeholder="e.g. Pulled from a retail box, signed at a show, bought from a collector friend…"
               />
             </Field>
+            <Field label="Condition notes">
+              <textarea
+                value={form.conditionNotes}
+                onChange={e => setField("conditionNotes", e.target.value)}
+                rows={2} className={cn(input, "resize-none")}
+                placeholder="Any notable scratches, creases, or observations…"
+              />
+            </Field>
           </Section>
 
           {/* ── Grading ────────────────────────────────────────────────── */}
@@ -471,13 +479,6 @@ export function AddCardForm({ collection }: Props) {
             <p className="text-slate-400 text-xs">
               ⚠ Photos preview locally but won&apos;t be saved until Cloudflare R2 is configured (next step).
             </p>
-          </Section>
-
-          {/* ── Condition ──────────────────────────────────────────────── */}
-          <Section title="Condition notes">
-            <textarea value={form.conditionNotes} onChange={e => setField("conditionNotes", e.target.value)}
-              rows={2} className={cn(input, "resize-none")}
-              placeholder="Any notable scratches, creases, or observations…" />
           </Section>
 
           {/* ── Acquisition (collapsible) ───────────────────────────────── */}

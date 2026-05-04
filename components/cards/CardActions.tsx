@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { deleteCardAction, removeFromCollectionAction } from "@/lib/actions/cards";
+import { useState, useEffect, useTransition } from "react";
+import {
+  deleteCardAction,
+  removeFromCollectionAction,
+  getCardCollectionCountAction,
+} from "@/lib/actions/cards";
 
 type Confirming = "remove" | "delete" | null;
 
@@ -11,8 +15,17 @@ interface Props {
 }
 
 export function CardActions({ cardId, collectionId }: Props) {
-  const [confirming, setConfirming] = useState<Confirming>(null);
-  const [isPending, startTransition] = useTransition();
+  const [confirming, setConfirming]         = useState<Confirming>(null);
+  const [collectionCount, setCollectionCount] = useState<number | null>(null);
+  const [isPending, startTransition]        = useTransition();
+
+  // Know how many collections this card belongs to so we can show
+  // accurate confirmation text before the user commits.
+  useEffect(() => {
+    if (collectionId) {
+      getCardCollectionCountAction(cardId).then(setCollectionCount);
+    }
+  }, [cardId, collectionId]);
 
   function cancel() { setConfirming(null); }
 
@@ -25,32 +38,41 @@ export function CardActions({ cardId, collectionId }: Props) {
     startTransition(async () => { await deleteCardAction(cardId); });
   }
 
-  // ── Confirming remove from collection ─────────────────────────────────────
+  // ── Confirming remove ─────────────────────────────────────────────────────
   if (confirming === "remove") {
+    const isLastCollection = collectionCount === 1;
     return (
       <>
-        <div className="col-span-full text-xs text-slate-500 text-center -mb-1">
-          Remove from this collection only — card stays in your library.
-        </div>
+        <p className="col-span-full text-xs text-slate-500 text-center -mb-1">
+          {isLastCollection
+            ? "This is the card's only collection — removing it will delete the card from your library."
+            : "Removes the card from this collection only. It will stay in your other collections."}
+        </p>
         <button onClick={cancel}
           className="flex-1 border border-slate-200 text-slate-500 text-xs font-medium py-2.5 rounded-xl hover:bg-slate-50 transition-colors">
           Cancel
         </button>
         <button disabled={isPending} onClick={doRemove}
-          className="flex-1 bg-slate-700 text-white text-xs font-semibold py-2.5 rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-60">
-          {isPending ? "Removing…" : "Yes, remove"}
+          className={`flex-1 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60 ${
+            isLastCollection ? "bg-alert hover:bg-red-800" : "bg-slate-700 hover:bg-slate-800"
+          }`}>
+          {isPending
+            ? "Removing…"
+            : isLastCollection
+              ? "Yes, delete"
+              : "Yes, remove"}
         </button>
       </>
     );
   }
 
-  // ── Confirming permanent delete ───────────────────────────────────────────
+  // ── Confirming delete ─────────────────────────────────────────────────────
   if (confirming === "delete") {
     return (
       <>
-        <div className="col-span-full text-xs text-slate-500 text-center -mb-1">
+        <p className="col-span-full text-xs text-slate-500 text-center -mb-1">
           This permanently deletes the card and all its data.
-        </div>
+        </p>
         <button onClick={cancel}
           className="flex-1 border border-slate-200 text-slate-500 text-xs font-medium py-2.5 rounded-xl hover:bg-slate-50 transition-colors">
           Cancel
@@ -63,7 +85,7 @@ export function CardActions({ cardId, collectionId }: Props) {
     );
   }
 
-  // ── Default state ─────────────────────────────────────────────────────────
+  // ── Default ───────────────────────────────────────────────────────────────
   return (
     <>
       {collectionId && (

@@ -145,9 +145,24 @@ export async function removeFromCollectionAction(cardId: string, collectionId: s
 
   await db.cardCollection.deleteMany({ where: { cardId, collectionId } });
 
+  // If this was the card's only collection it now has no home — delete it
+  // entirely rather than leaving an orphan the user can't access.
+  const remaining = await db.cardCollection.count({ where: { cardId } });
+  if (remaining === 0) {
+    await db.card.delete({ where: { id: cardId } });
+  }
+
   revalidatePath(`/dashboard/collections/${collectionId}`);
   revalidatePath("/dashboard");
   redirect(`/dashboard/collections/${collectionId}`);
+}
+
+// Returns how many collections a card belongs to — used by CardActions
+// to show accurate confirmation copy before the user commits.
+export async function getCardCollectionCountAction(cardId: string) {
+  const session = await auth();
+  if (!session?.user?.id) return 0;
+  return db.cardCollection.count({ where: { cardId } });
 }
 
 export async function deleteCardAction(cardId: string) {

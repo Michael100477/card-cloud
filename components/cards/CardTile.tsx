@@ -73,8 +73,11 @@ export function CardTile({ card }: { card: CardRow }) {
           {card.player}
         </p>
         <p className="text-slate-400 text-xs leading-tight truncate">
-          {card.year} {card.set}
+          {card.year} {card.set}{card.subset ? ` · ${card.subset}` : ""}
         </p>
+        {card.serialNumber && (
+          <p className="text-slate-400 text-xs font-mono leading-tight">{card.serialNumber}</p>
+        )}
         <p className="text-navy text-xs font-bold mt-0.5">
           {card.estimatedValue
             ? `$${card.estimatedValue.toLocaleString()}`

@@ -13,6 +13,7 @@ export interface CardRow {
   set: string;
   subset: string | null;
   cardNumber: string | null;
+  serialNumber: string | null;
   sport: string | null;
   team: string | null;
   grade: string | null;

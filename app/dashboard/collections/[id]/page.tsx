@@ -23,7 +23,7 @@ export default async function CollectionDetailPage({ params }: Props) {
           card: {
             select: {
               id: true, player: true, year: true, manufacturer: true,
-              set: true, subset: true, cardNumber: true, sport: true,
+              set: true, subset: true, cardNumber: true, serialNumber: true, sport: true,
               team: true, grade: true, gradeCompany: true, tags: true,
               photos: true, estimatedValue: true, status: true,
               createdAt: true,

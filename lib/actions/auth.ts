@@ -61,8 +61,9 @@ export async function signUpAction(formData: FormData) {
     return { error: "Unable to create account right now. Please try again shortly." };
   }
 
-  // Auto sign-in after registration (outside try so redirect() throws normally)
-  await signIn("credentials", { email, password, redirectTo: "/dashboard" });
+  // Redirect to login with a success flag — auto sign-in inside server actions
+  // is unreliable in NextAuth v5 beta; the user logs in on the next step.
+  redirect("/login?signup=success");
 }
 
 // ─── Sign in ──────────────────────────────────────────────────────────────────

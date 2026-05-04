@@ -34,8 +34,17 @@ export default function SignupPage() {
     }
 
     startTransition(async () => {
-      const result = await signUpAction(fd);
-      if (result?.error) setError(result.error);
+      try {
+        const result = await signUpAction(fd);
+        // signUpAction returns an error object or redirects (which throws internally)
+        if (result?.error) setError(result.error);
+      } catch (err) {
+        // NEXT_REDIRECT throws are handled by Next.js automatically — ignore them
+        const message = err instanceof Error ? err.message : "";
+        if (!message.includes("NEXT_REDIRECT")) {
+          setError("Something went wrong. Please try again.");
+        }
+      }
     });
   }
 

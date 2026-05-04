@@ -137,6 +137,19 @@ export async function updateCardAction(cardId: string, data: UpdateCardInput) {
   }
 }
 
+export async function removeFromCollectionAction(cardId: string, collectionId: string) {
+  const userId = await requireAuth();
+
+  const card = await db.card.findUnique({ where: { id: cardId }, select: { ownerId: true } });
+  if (!card || card.ownerId !== userId) return { error: "Not found." };
+
+  await db.cardCollection.deleteMany({ where: { cardId, collectionId } });
+
+  revalidatePath(`/dashboard/collections/${collectionId}`);
+  revalidatePath("/dashboard");
+  redirect(`/dashboard/collections/${collectionId}`);
+}
+
 export async function deleteCardAction(cardId: string) {
   const userId = await requireAuth();
 

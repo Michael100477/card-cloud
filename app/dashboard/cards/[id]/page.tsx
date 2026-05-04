@@ -64,7 +64,9 @@ export default async function CardDetailPage({ params }: Props) {
           </>
         )}
         <span>/</span>
-        <span className="text-navy font-medium truncate">{card.player}</span>
+        <span className="text-navy font-medium truncate">
+          {card.year} · {card.manufacturer} · {card.set}{card.subset ? ` · ${card.subset}` : ""}
+        </span>
       </nav>
 
       {/* Two-column layout */}
@@ -87,8 +89,8 @@ export default async function CardDetailPage({ params }: Props) {
             gradient={gradient}
           />
 
-          {/* Edit + Delete */}
-          <div className="flex gap-2">
+          {/* Edit / Remove / Delete */}
+          <div className="flex flex-wrap gap-2">
             <Link
               href={`/dashboard/cards/${id}/edit`}
               className="flex-1 text-center border border-slate-200 text-navy text-sm font-medium py-2.5 rounded-xl hover:bg-slate-50 transition-colors"

@@ -15,7 +15,8 @@ export default async function DashboardPage() {
       include: {
         _count: { select: { cards: true } },
         cards: {
-          take: 3,
+          orderBy: { addedAt: "desc" },
+          take: 12,                           // enough for the cover picker
           include: { card: { select: { photos: true, player: true } } },
         },
       },

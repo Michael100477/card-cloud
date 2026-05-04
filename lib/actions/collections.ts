@@ -72,6 +72,17 @@ export async function updateCollectionAction(formData: FormData) {
   return { success: true };
 }
 
+export async function setCollectionCoverAction(collectionId: string, coverImage: string) {
+  const userId = await requireAuth();
+
+  const col = await db.collection.findUnique({ where: { id: collectionId }, select: { ownerId: true } });
+  if (!col || col.ownerId !== userId) return { error: "Not found." };
+
+  await db.collection.update({ where: { id: collectionId }, data: { coverImage } });
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
 export async function deleteCollectionAction(id: string) {
   const userId = await requireAuth();
 

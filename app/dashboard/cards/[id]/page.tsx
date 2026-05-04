@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { CardActions } from "@/components/cards/CardActions";
+import { CardPhotoDisplay } from "@/components/cards/CardPhotoDisplay";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -72,78 +73,19 @@ export default async function CardDetailPage({ params }: Props) {
         {/* ── Left: photo + actions ── */}
         <div className="flex flex-col gap-4">
 
-          {/* ── No photos: sport-colour placeholder ── */}
-          {card.photos.length === 0 && (
-            <div
-              className="relative rounded-2xl overflow-hidden shadow-md w-full"
-              style={{ aspectRatio: "2.5/3.5", background: `linear-gradient(145deg, ${gradient[0]}, ${gradient[1]})` }}
-            >
-              <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center">
-                <p className="text-white/30 text-xs uppercase tracking-widest mb-4">
-                  {card.manufacturer} · {card.year}
-                </p>
-                <p className="text-white font-bold text-xl leading-tight mb-2">{card.player}</p>
-                <p className="text-white/60 text-sm">{card.set}{card.subset ? ` · ${card.subset}` : ""}</p>
-                {card.grade && (
-                  <div className="mt-6 px-3 py-1.5 rounded-full text-white text-xs font-bold" style={{ background: gradeBg }}>
-                    {card.gradeCompany} {card.grade}
-                  </div>
-                )}
-                {card.serialNumber && (
-                  <p className="text-white/50 text-xs mt-3 font-mono">{card.serialNumber}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── One photo: full-width front ── */}
-          {card.photos.length === 1 && (
-            <div className="relative rounded-2xl overflow-hidden shadow-md w-full" style={{ aspectRatio: "2.5/3.5" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={card.photos[0]} alt="Front" className="w-full h-full object-cover" />
-              {card.grade && (
-                <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-white text-xs font-bold shadow-md" style={{ background: gradeBg }}>
-                  {card.gradeCompany} {card.grade}
-                </div>
-              )}
-              <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded-md font-medium">Front</div>
-            </div>
-          )}
-
-          {/* ── Two or more photos: front + back side by side ── */}
-          {card.photos.length >= 2 && (
-            <div className="grid grid-cols-2 gap-3">
-              {/* Front */}
-              <div className="relative rounded-2xl overflow-hidden shadow-sm" style={{ aspectRatio: "2.5/3.5" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={card.photos[0]} alt="Front" className="w-full h-full object-cover" />
-                {card.grade && (
-                  <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-white font-bold shadow-md" style={{ background: gradeBg, fontSize: "10px" }}>
-                    {card.gradeCompany} {card.grade}
-                  </div>
-                )}
-                <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded-md font-medium">Front</div>
-              </div>
-              {/* Back */}
-              <div className="relative rounded-2xl overflow-hidden shadow-sm" style={{ aspectRatio: "2.5/3.5" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={card.photos[1]} alt="Back" className="w-full h-full object-cover" />
-                <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded-md font-medium">Back</div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Additional photos (3+) as portrait thumbnails ── */}
-          {card.photos.length > 2 && (
-            <div className="grid grid-cols-4 gap-2">
-              {card.photos.slice(2).map((url, i) => (
-                <div key={i} className="relative rounded-xl overflow-hidden" style={{ aspectRatio: "2.5/3.5" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`Photo ${i + 3}`} className="w-full h-full object-cover" />
-                </div>
-              ))}
-            </div>
-          )}
+          <CardPhotoDisplay
+            photos={card.photos}
+            player={card.player}
+            manufacturer={card.manufacturer}
+            year={card.year}
+            set={card.set}
+            subset={card.subset}
+            grade={card.grade}
+            gradeCompany={card.gradeCompany}
+            serialNumber={card.serialNumber}
+            gradeBg={gradeBg}
+            gradient={gradient}
+          />
 
           {/* Edit + Delete */}
           <div className="flex gap-2">

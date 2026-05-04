@@ -20,7 +20,7 @@ export function CardTile({ card }: { card: CardRow }) {
     >
       {/* Card image frame — true trading card aspect ratio 2.5 : 3.5 */}
       <div
-        className="relative rounded-xl overflow-hidden bg-slate-100 shadow-sm group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-200"
+        className="relative overflow-hidden bg-slate-100 shadow-sm group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-200"
         style={{ aspectRatio: "2.5 / 3.5" }}
       >
         {hasPhoto ? (

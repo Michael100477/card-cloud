@@ -708,7 +708,7 @@ function ResultCard({ result, onUse, onReset }: {
       {result.grade && (
         <p className="text-navy text-sm font-medium mt-0.5">{result.grader} {result.grade}</p>
       )}
-      {!result.player && (
+      {!result.player && result.grader === "PSA" && (
         <p className="text-slate-400 text-xs mt-2">
           Cert found — add PSA credentials in Settings → API Keys for full card details.
         </p>

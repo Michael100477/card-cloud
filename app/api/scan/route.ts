@@ -43,8 +43,14 @@ export async function POST(req: NextRequest) {
     const detection = extractCertNumber(rawText);
     const label     = parseLabelData(rawText);
 
-    // OCR succeeded if it found a cert number OR a year — not just noise
-    if (detection || label.year) {
+    // OCR is only "good enough" if it found the key identifying fields.
+    // Finding just a cert or just a year means OCR read partial data —
+    // fall through to Vision which will fill in the complete picture.
+    const ocrIsComplete = !!detection &&
+      !!label.player &&
+      !!(label.manufacturer || label.set);
+
+    if (ocrIsComplete) {
       ocrData = { detection, label };
     }
   } catch {

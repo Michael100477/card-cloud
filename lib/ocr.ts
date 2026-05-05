@@ -41,19 +41,20 @@ async function labelCrops(imageBuffer: Buffer): Promise<Buffer[]> {
   const crops: Buffer[] = [];
 
   if (h >= w) {
-    // Portrait — try multiple top-slice percentages (small → large)
-    for (const pct of [0.10, 0.15, 0.20, 0.28]) {
+    // Portrait — BGS labels have 4 lines so need a slightly larger crop.
+    // Start at 15% (catches most labels), then try larger if needed.
+    for (const pct of [0.15, 0.20, 0.25, 0.30]) {
       const sliceH = Math.floor(h * pct);
       crops.push(await sharp(imageBuffer).extract({ left: 0, top: 0, width: w, height: sliceH }).toBuffer());
     }
-    // Also try bottom slices (label could be at the bottom for some slabs)
-    for (const pct of [0.12, 0.18]) {
+    // Also try bottom slices (label could be at the other end)
+    for (const pct of [0.15, 0.20]) {
       const sliceH = Math.floor(h * pct);
       crops.push(await sharp(imageBuffer).extract({ left: 0, top: h - sliceH, width: w, height: sliceH }).toBuffer());
     }
   } else {
     // Landscape — label on left or right edge, try both with rotation
-    for (const pct of [0.12, 0.18, 0.25]) {
+    for (const pct of [0.15, 0.20, 0.25]) {
       const sliceW = Math.floor(w * pct);
       crops.push(await sharp(imageBuffer).extract({ left: 0,        top: 0, width: sliceW, height: h }).rotate(90).toBuffer());
       crops.push(await sharp(imageBuffer).extract({ left: w-sliceW, top: 0, width: sliceW, height: h }).rotate(-90).toBuffer());

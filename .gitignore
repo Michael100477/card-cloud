@@ -48,3 +48,6 @@ next-env.d.ts
 
 # uploaded card photos (local dev — replaced by R2 in production)
 /public/uploads/
+
+eng.traineddata
+*.traineddata

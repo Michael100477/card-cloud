@@ -255,15 +255,43 @@ export function parseLabelData(ocrText: string): LabelData {
   if (cnM) result.cardNumber = cnM[1];
 
   // ── Grade ─────────────────────────────────────────────────────────────────
-  const gradePatterns = [
-    /\bGEM[\s-]*MT\s+(\d+)/i, /\bNM[\s-]*MT\s+(\d+)/i,
-    /\bMINT\s+(\d+(?:\.\d+)?)/i, /\bEX[\s-]*MT\s+(\d+)/i,
-    /\b(?:BGS|SGC|CGC|HGA)\s+(\d+(?:\.\d+)?)/i,
-    /(?:GEM|MINT|NM|EX|VG|GOOD|FAIR|POOR|AUTHENTIC)[^\d]*(\d+(?:\.\d+)?)/i,
-  ];
-  for (const p of gradePatterns) {
-    const m = raw.match(p);
-    if (m) { result.grade = m[1]; break; }
+  // For BGS labels the overall grade is the large standalone number that
+  // appears BEFORE the grade word (MINT, GEM MINT). The subgrade numbers
+  // (CENTERING X / CORNERS X / etc.) are already captured above and must
+  // not be used as the overall grade.
+
+  const hasBGS = upper.includes("CENTERING") && upper.includes("CORNERS");
+
+  if (hasBGS) {
+    // BGS: look for a standalone number immediately before MINT or GEM MINT
+    // e.g. "9 MINT", "9.5 GEM MINT" — the large grade printed to the right
+    const bgsMint = raw.match(/(\d+(?:\.\d+)?)\s+(?:GEM\s*MINT|MINT)/i);
+    if (bgsMint) {
+      result.grade = bgsMint[1];
+    } else {
+      // Fallback: standalone number on its own line that isn't a subgrade value
+      const subgradeVals = new Set(
+        [result.bgsSubCentering, result.bgsSubCorners, result.bgsSubEdges, result.bgsSubSurface]
+          .filter(v => v !== null)
+          .map(v => String(v))
+      );
+      for (const line of lines) {
+        const m = line.trim().match(/^(\d+(?:\.\d+)?)$/);
+        if (m && !subgradeVals.has(m[1])) { result.grade = m[1]; break; }
+      }
+    }
+  } else {
+    // Non-BGS graders
+    const gradePatterns = [
+      /\bGEM[\s-]*MT\s+(\d+)/i, /\bNM[\s-]*MT\s+(\d+)/i,
+      /\bMINT\s+(\d+(?:\.\d+)?)/i, /\bEX[\s-]*MT\s+(\d+)/i,
+      /\b(?:SGC|CGC|HGA)\s+(\d+(?:\.\d+)?)/i,
+      /(?:GEM|MINT|NM|EX|VG|GOOD|FAIR|POOR|AUTHENTIC)[^\d]*(\d+(?:\.\d+)?)/i,
+    ];
+    for (const p of gradePatterns) {
+      const m = raw.match(p);
+      if (m) { result.grade = m[1]; break; }
+    }
   }
 
   // ── Year + Brand (line 1 of label) ───────────────────────────────────────

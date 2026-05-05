@@ -30,8 +30,13 @@ Look at the GRADING LABEL — the small printed label on the slab (NOT the card 
 - bgsSubEdges: BGS edges subgrade — BGS/BGGS only
 - bgsSubSurface: BGS surface subgrade — BGS/BGGS only
 
-Notes:
-- BGS labels show subgrades: CENTERING, CORNERS, EDGES, SURFACE — extract all four; the OVERALL grade is shown separately (largest standalone number)
+IMPORTANT for BGS/BGGS labels:
+- The OVERALL grade is the single LARGE number printed alone in the top-right corner of the label (e.g. "9" or "9.5" in big text)
+- The CENTERING, CORNERS, EDGES, SURFACE values are SUBGRADES — they are smaller numbers next to those specific labels
+- Do NOT use a subgrade value as the overall grade
+- Example: if label shows big "9" on the right and "EDGES 9.5 SURFACE 9.5" in smaller text, grade="9", bgsSubEdges=9.5, bgsSubSurface=9.5
+
+Other notes:
 - For BGS/BGGS, the Beckett logo may appear as a clear watermark — identify from subgrade labels
 - manufacturer and set are different: Topps makes Bowman Chrome; set = "Bowman Chrome", manufacturer = "Topps"
 - Return ONLY a JSON object. Use null for fields you cannot read.

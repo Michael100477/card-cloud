@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createCardAction } from "@/lib/actions/cards";
 import { cn } from "@/lib/utils";
+import type { GraderCardData } from "@/lib/graders";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -240,18 +241,37 @@ export function AddCardForm({ collection }: Props) {
         ))}
       </div>
 
-      {/* Coming-soon tabs */}
-      {tab !== "manual" && (
+      {/* Bulk import — coming soon */}
+      {tab === "import" && (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-100">
-          <p className="text-3xl mb-3">{tab === "scan" ? "📷" : "📤"}</p>
-          <p className="text-navy font-semibold">
-            {tab === "scan" ? "Slab scanning" : "Bulk CSV import"} coming soon
-          </p>
+          <p className="text-3xl mb-3">📤</p>
+          <p className="text-navy font-semibold">Bulk CSV import coming soon</p>
           <p className="text-slate-400 text-sm mt-1">This feature is in the next phase of development.</p>
           <button onClick={() => setTab("manual")} className="mt-4 text-brand text-sm font-medium hover:underline">
             Use manual entry instead
           </button>
         </div>
+      )}
+
+      {/* Scan slab */}
+      {tab === "scan" && (
+        <SlabScanner
+          onDetected={(data) => {
+            // Pre-fill form fields with whatever the grader API returned
+            if (data.player)       setField("player",       data.player);
+            if (data.year)         setField("year",         String(data.year));
+            if (data.manufacturer) setField("manufacturer", data.manufacturer);
+            if (data.set)          setField("set",          data.set);
+            if (data.cardNumber)   setField("cardNumber",   data.cardNumber);
+            if (data.grade)        setField("grade",        data.grade);
+            if (data.sport)        setField("sport",        data.sport);
+            if (data.grader && data.grader !== "Unknown") {
+              setField("gradeCompany", data.grader);
+            }
+            setField("certNumber", data.certNumber);
+            setTab("manual"); // Switch to manual so user can review + save
+          }}
+        />
       )}
 
       {/* Manual form */}
@@ -634,6 +654,215 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 const input = "w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-navy placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition bg-white";
+
+// ─── SlabScanner ──────────────────────────────────────────────────────────────
+
+function SlabScanner({ onDetected }: { onDetected: (data: GraderCardData) => void }) {
+  const [image,    setImage]    = useState<File | null>(null);
+  const [preview,  setPreview]  = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [result,   setResult]   = useState<GraderCardData | null>(null);
+  const [rawText,  setRawText]  = useState<string | null>(null);
+  const [error,    setError]    = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function pickImage(file: File) {
+    setImage(file);
+    setPreview(URL.createObjectURL(file));
+    setResult(null);
+    setError("");
+    setRawText(null);
+  }
+
+  async function doScan() {
+    if (!image) return;
+    setScanning(true);
+    setError("");
+
+    const fd = new FormData();
+    fd.append("image", image);
+
+    try {
+      const res  = await fetch("/api/scan", { method: "POST", body: fd });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data.error ?? "Scan failed. Try a clearer photo.");
+        setRawText(data.rawText ?? null);
+      } else {
+        setResult(data.cardData);
+        setRawText(data.rawText ?? null);
+      }
+    } catch {
+      setError("Scan failed. Please check your connection and try again.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  function reset() {
+    if (preview) URL.revokeObjectURL(preview);
+    setImage(null); setPreview(null);
+    setResult(null); setError(""); setRawText(null);
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 p-6 flex flex-col gap-5">
+      <div>
+        <p className="text-navy font-semibold mb-1">Scan a graded slab</p>
+        <p className="text-slate-400 text-sm">
+          Photograph the cert label on the slab. We&apos;ll extract the cert
+          number and look up the card details automatically.
+        </p>
+      </div>
+
+      {/* Image picker */}
+      {!image ? (
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="border-2 border-dashed border-slate-200 rounded-xl py-12 flex flex-col items-center gap-3 hover:border-brand hover:bg-slate-50 transition-colors"
+        >
+          <ScannerIcon className="w-10 h-10 text-slate-300" />
+          <div className="text-center">
+            <p className="text-navy font-medium text-sm">Take or upload a photo</p>
+            <p className="text-slate-400 text-xs mt-0.5">
+              Point at the cert label — front of slab works best
+            </p>
+          </div>
+        </button>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {/* Preview */}
+          <div className="relative rounded-xl overflow-hidden bg-slate-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={preview!} alt="Slab" className="w-full max-h-64 object-contain" />
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 border border-red-100 text-alert text-sm rounded-xl px-4 py-3">
+              {error}
+              {rawText && (
+                <details className="mt-2">
+                  <summary className="text-xs cursor-pointer text-slate-400">Show OCR text</summary>
+                  <pre className="text-xs mt-1 text-slate-500 whitespace-pre-wrap">{rawText}</pre>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Result */}
+          {result && (
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div>
+                  <p className="text-success font-semibold text-sm">
+                    ✓ {result.grader} cert #{result.certNumber} detected
+                  </p>
+                  {result.player && (
+                    <p className="text-navy font-bold text-lg mt-0.5">{result.player}</p>
+                  )}
+                  {(result.year || result.manufacturer || result.set) && (
+                    <p className="text-slate-500 text-sm">
+                      {[result.year, result.manufacturer, result.set].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                  {result.grade && (
+                    <p className="text-navy text-sm font-medium mt-0.5">
+                      {result.grader} {result.grade}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {!result.player && (
+                <p className="text-slate-400 text-xs mb-3">
+                  Cert number found but grader API credentials aren&apos;t configured —
+                  the cert number has been filled in. Add PSA_CLIENT_ID and
+                  PSA_CLIENT_SECRET to .env for full card detail lookup.
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onDetected(result)}
+                  className="flex-1 bg-amber text-amber-dark font-semibold py-2.5 rounded-xl text-sm hover:brightness-105 transition-all"
+                >
+                  Use this data →
+                </button>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="px-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  Scan again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          {!result && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={doScan}
+                disabled={scanning}
+                className="flex-1 bg-brand text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-light-navy transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {scanning ? (
+                  <>
+                    <SpinnerIcon className="w-4 h-4 animate-spin" />
+                    Reading slab…
+                  </>
+                ) : (
+                  "Scan this image"
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={reset}
+                className="px-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Change photo
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={fileRef} type="file"
+        accept="image/*" capture="environment"
+        className="hidden"
+        onChange={e => { if (e.target.files?.[0]) pickImage(e.target.files[0]); }}
+      />
+
+      <p className="text-slate-300 text-xs text-center">
+        Works with PSA · BGS · SGC · CGC slabs · Cert number auto-detected
+      </p>
+    </div>
+  );
+}
+
+function ScannerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
+      <rect x="7" y="7" width="10" height="10" rx="1"/>
+    </svg>
+  );
+}
+
+function SpinnerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeDashoffset="12" strokeLinecap="round"/>
+    </svg>
+  );
+}
 
 // ─── Icons ─────────────────────────────────────────────────────────────────────
 

@@ -6,10 +6,7 @@ const nextConfig: NextConfig = {
   // its own JS bundle from loading, preventing React from hydrating.
   allowedDevOrigins: ["localhost", "127.0.0.1"],
 
-  // Run instrumentation.ts on server startup (pre-warms Tesseract language model)
-  experimental: {
-    instrumentationHook: true,
-  },
+  // instrumentation.ts runs automatically in Next.js 16+ (pre-warms Tesseract)
 };
 
 export default nextConfig;

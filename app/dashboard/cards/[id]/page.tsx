@@ -171,6 +171,26 @@ export default async function CardDetailPage({ params }: Props) {
             <DetailRow label="Cert number" value={card.certNumber} />
           </DetailSection>
 
+          {/* BGS subgrades — only for BGS / BGGS */}
+          {(card.gradeCompany === "BGS" || card.gradeCompany === "BGGS") &&
+           (card.bgsSubCentering || card.bgsSubCorners || card.bgsSubEdges || card.bgsSubSurface) && (
+            <DetailSection title="BGS Subgrades">
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ["Centering", card.bgsSubCentering],
+                  ["Corners",   card.bgsSubCorners],
+                  ["Edges",     card.bgsSubEdges],
+                  ["Surface",   card.bgsSubSurface],
+                ].map(([label, val]) => val != null && (
+                  <div key={String(label)} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+                    <span className="text-slate-400 text-xs">{String(label)}</span>
+                    <span className="text-navy text-sm font-bold">{String(Number(val))}</span>
+                  </div>
+                ))}
+              </div>
+            </DetailSection>
+          )}
+
           {/* Acquisition */}
           {(card.acquiredDate || acquiredPrice || card.acquiredSource) && (
             <DetailSection title="Acquisition">

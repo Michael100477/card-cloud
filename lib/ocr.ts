@@ -183,13 +183,18 @@ export function extractCertNumber(ocrText: string): CertDetection | null {
 // ─── Label text parser ────────────────────────────────────────────────────────
 
 export interface LabelData {
-  player:       string | null;
-  year:         number | null;
-  manufacturer: string | null;
-  set:          string | null;
-  subset:       string | null;
-  cardNumber:   string | null;
-  grade:        string | null;
+  player:          string | null;
+  year:            number | null;
+  manufacturer:    string | null;
+  set:             string | null;
+  subset:          string | null;
+  cardNumber:      string | null;
+  grade:           string | null;
+  // BGS subgrades — only present on BGS/BGGS cards
+  bgsSubCentering: number | null;
+  bgsSubCorners:   number | null;
+  bgsSubEdges:     number | null;
+  bgsSubSurface:   number | null;
 }
 
 function tc(s: string): string {
@@ -227,7 +232,19 @@ export function parseLabelData(ocrText: string): LabelData {
   const result: LabelData = {
     player: null, year: null, manufacturer: null,
     set: null, subset: null, cardNumber: null, grade: null,
+    bgsSubCentering: null, bgsSubCorners: null,
+    bgsSubEdges: null, bgsSubSurface: null,
   };
+
+  // ── BGS subgrades ────────────────────────────────────────────────────────
+  const cenM = upper.match(/CENTERING\s+(\d+(?:\.\d+)?)/);
+  const corM = upper.match(/CORNERS\s+(\d+(?:\.\d+)?)/);
+  const edgM = upper.match(/EDGES\s+(\d+(?:\.\d+)?)/);
+  const surM = upper.match(/SURFACE\s+(\d+(?:\.\d+)?)/);
+  if (cenM) result.bgsSubCentering = parseFloat(cenM[1]);
+  if (corM) result.bgsSubCorners   = parseFloat(corM[1]);
+  if (edgM) result.bgsSubEdges     = parseFloat(edgM[1]);
+  if (surM) result.bgsSubSurface   = parseFloat(surM[1]);
 
   // ── Year ──────────────────────────────────────────────────────────────────
   const yearM = upper.match(/\b(19[0-9]{2}|20[0-2][0-9])\b/);

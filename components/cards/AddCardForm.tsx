@@ -29,6 +29,7 @@ const BLANK = {
   manufacturer:"", set:"", subset:"", cardNumber:"", serialNumber:"",
   sport:"", team:"", gradeCompany:"", grade:"", certNumber:"",
   notes:"", conditionNotes:"", acquiredDate:"", acquiredPrice:"", acquiredSource:"",
+  bgsSubCentering:"", bgsSubCorners:"", bgsSubEdges:"", bgsSubSurface:"",
 };
 
 type Tab = "manual" | "scan" | "import";
@@ -181,7 +182,11 @@ export function AddCardForm({ collection }: Props) {
         gradeCompany: form.gradeCompany || undefined,
         grade:        form.grade        || undefined,
         certNumber:   form.certNumber   || undefined,
-        serialNumber: form.serialNumber || undefined,
+        serialNumber:    form.serialNumber || undefined,
+        bgsSubCentering: form.bgsSubCentering ? parseFloat(form.bgsSubCentering) : undefined,
+        bgsSubCorners:   form.bgsSubCorners   ? parseFloat(form.bgsSubCorners)   : undefined,
+        bgsSubEdges:     form.bgsSubEdges     ? parseFloat(form.bgsSubEdges)     : undefined,
+        bgsSubSurface:   form.bgsSubSurface   ? parseFloat(form.bgsSubSurface)   : undefined,
         tags: [...selectedTags, ...customTags],
         conditionNotes: form.conditionNotes || undefined,
         notes:        form.notes         || undefined,
@@ -270,6 +275,11 @@ export function AddCardForm({ collection }: Props) {
               setField("gradeCompany", data.grader);
             }
             setField("certNumber", data.certNumber);
+            // BGS subgrades
+            if (data.bgsSubCentering != null) setField("bgsSubCentering", String(data.bgsSubCentering));
+            if (data.bgsSubCorners   != null) setField("bgsSubCorners",   String(data.bgsSubCorners));
+            if (data.bgsSubEdges     != null) setField("bgsSubEdges",     String(data.bgsSubEdges));
+            if (data.bgsSubSurface   != null) setField("bgsSubSurface",   String(data.bgsSubSurface));
             setTab("manual"); // Switch to manual so user can review + save
           }}
         />
@@ -388,6 +398,25 @@ export function AddCardForm({ collection }: Props) {
                   className={input} placeholder="e.g. 12345678" />
               </Field>
             </div>
+
+            {/* BGS subgrades — only shown for BGS / BGGS */}
+            {(form.gradeCompany === "BGS" || form.gradeCompany === "BGGS") && (
+              <div>
+                <p className="text-xs text-slate-400 font-medium mb-2">Subgrades</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["Centering","Corners","Edges","Surface"] as const).map(sub => (
+                    <Field key={sub} label={sub}>
+                      <input
+                        type="number" step="0.5" min="1" max="10"
+                        value={form[`bgsSub${sub}` as keyof typeof form]}
+                        onChange={e => setField(`bgsSub${sub}` as keyof typeof BLANK, e.target.value)}
+                        className={input} placeholder="e.g. 9.5"
+                      />
+                    </Field>
+                  ))}
+                </div>
+              </div>
+            )}
           </Section>
 
           {/* ── Tags ───────────────────────────────────────────────────── */}

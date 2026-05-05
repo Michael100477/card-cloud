@@ -26,6 +26,10 @@ export interface CreateCardInput {
   certNumber?: string;
   serialNumber?: string;
   tags: string[];
+  bgsSubCentering?: number;
+  bgsSubCorners?:   number;
+  bgsSubEdges?:     number;
+  bgsSubSurface?:   number;
   conditionNotes?: string;
   photos: string[];           // R2 URLs — empty until storage is wired up
   notes?: string;
@@ -59,6 +63,10 @@ export async function createCardAction(data: CreateCardInput) {
         certNumber:    data.certNumber?.trim()   || null,
         serialNumber:  data.serialNumber?.trim() || null,
         tags:          data.tags,
+        bgsSubCentering: data.bgsSubCentering ?? null,
+        bgsSubCorners:   data.bgsSubCorners   ?? null,
+        bgsSubEdges:     data.bgsSubEdges     ?? null,
+        bgsSubSurface:   data.bgsSubSurface   ?? null,
         conditionNotes: data.conditionNotes?.trim() || null,
         notes:          data.notes?.trim()          || null,
         photos:        data.photos,
@@ -122,6 +130,10 @@ export async function updateCardAction(cardId: string, data: UpdateCardInput) {
         certNumber:    data.certNumber?.trim()   || null,
         serialNumber:  data.serialNumber?.trim() || null,
         tags:          data.tags,
+        bgsSubCentering: data.bgsSubCentering ?? null,
+        bgsSubCorners:   data.bgsSubCorners   ?? null,
+        bgsSubEdges:     data.bgsSubEdges     ?? null,
+        bgsSubSurface:   data.bgsSubSurface   ?? null,
         conditionNotes: data.conditionNotes?.trim() || null,
         notes:          data.notes?.trim()          || null,
         photos:        data.photos,

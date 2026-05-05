@@ -4,7 +4,7 @@ import { readLabelWithVision } from "@/lib/vision";
 import { extractText, extractCertNumber, parseLabelData } from "@/lib/ocr";
 import { lookupCert } from "@/lib/graders";
 
-const OCR_TIMEOUT_MS = 120_000;
+const OCR_TIMEOUT_MS = 60_000;
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -21,100 +21,103 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  // ── Path 1: Claude Vision (ANTHROPIC_API_KEY set) ─────────────────────────
-  // Much more reliable than OCR — reads the label like a human would.
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      const visionResult = await readLabelWithVision(buffer);
+  // ── Path 1: Tesseract OCR (free, try first) ───────────────────────────────
+  let ocrData: { detection: ReturnType<typeof extractCertNumber>; label: ReturnType<typeof parseLabelData> } | null = null;
 
-      if (visionResult && (visionResult.certNumber || visionResult.year)) {
-        // PSA: enrich further with API data where available
-        let apiData = null;
-        if (visionResult.certNumber && visionResult.grader === "PSA") {
-          apiData = await lookupCert(visionResult.certNumber, "PSA").catch(() => null);
-        }
-
-        const cardData = {
-          certNumber:   visionResult.certNumber,
-          grader:       visionResult.grader,
-          player:       apiData?.player       || visionResult.player       || null,
-          year:         apiData?.year         || visionResult.year         || null,
-          manufacturer: apiData?.manufacturer || visionResult.manufacturer || null,
-          set:          apiData?.set          || visionResult.set          || null,
-          subset:       apiData?.subset       || visionResult.subset       || null,
-          cardNumber:   apiData?.cardNumber   || visionResult.cardNumber   || null,
-          grade:        apiData?.grade        || visionResult.grade        || null,
-          sport:        apiData?.sport        || visionResult.sport        || null,
-        };
-
-        return NextResponse.json({
-          success: true,
-          certNumber: visionResult.certNumber,
-          grader:     visionResult.grader,
-          cardData,
-          source:     "vision",
-        });
-      }
-    } catch (err) {
-      console.error("[scan vision]", err);
-      // Fall through to OCR
-    }
-  }
-
-  // ── Path 2: Tesseract OCR (fallback when no Anthropic key) ───────────────
-  let rawText: string;
   try {
-    rawText = await Promise.race([
+    const rawText = await Promise.race([
       extractText(buffer),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("OCR_TIMEOUT")), OCR_TIMEOUT_MS)
       ),
     ]);
-  } catch (err) {
-    const isTimeout = err instanceof Error && err.message === "OCR_TIMEOUT";
+
+    const detection = extractCertNumber(rawText);
+    const label     = parseLabelData(rawText);
+
+    // OCR succeeded if it found a cert number OR a year — not just noise
+    if (detection || label.year) {
+      ocrData = { detection, label };
+    }
+  } catch {
+    // OCR timed out or failed — fall through to vision
+  }
+
+  // ── Path 2: Claude Vision (only if OCR failed) ────────────────────────────
+  if (!ocrData && process.env.ANTHROPIC_API_KEY) {
+    try {
+      const visionResult = await readLabelWithVision(buffer);
+
+      if (visionResult && (visionResult.certNumber || visionResult.year)) {
+        let apiData = null;
+        if (visionResult.certNumber && visionResult.grader === "PSA") {
+          apiData = await lookupCert(visionResult.certNumber, "PSA").catch(() => null);
+        }
+
+        return NextResponse.json({
+          success: true,
+          certNumber: visionResult.certNumber,
+          grader:     visionResult.grader,
+          source:     "vision",
+          cardData: {
+            certNumber:      visionResult.certNumber,
+            grader:          visionResult.grader,
+            player:          apiData?.player       || visionResult.player       || null,
+            year:            apiData?.year         || visionResult.year         || null,
+            manufacturer:    apiData?.manufacturer || visionResult.manufacturer || null,
+            set:             apiData?.set          || visionResult.set          || null,
+            subset:          apiData?.subset       || visionResult.subset       || null,
+            cardNumber:      apiData?.cardNumber   || visionResult.cardNumber   || null,
+            grade:           apiData?.grade        || visionResult.grade        || null,
+            sport:           apiData?.sport        || visionResult.sport        || null,
+            bgsSubCentering: visionResult.bgsSubCentering ?? null,
+            bgsSubCorners:   visionResult.bgsSubCorners   ?? null,
+            bgsSubEdges:     visionResult.bgsSubEdges     ?? null,
+            bgsSubSurface:   visionResult.bgsSubSurface   ?? null,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("[scan vision]", err);
+    }
+  }
+
+  // ── No usable data from either path ──────────────────────────────────────
+  if (!ocrData) {
     return NextResponse.json({
       success: false,
-      error: isTimeout
-        ? "Scan timed out. Enter the cert number manually — it's faster."
-        : "Scan failed. Try entering the cert number manually.",
+      error:   "Could not read the label. Try a closer photo or enter the cert number manually.",
     });
   }
 
-  const detection = extractCertNumber(rawText);
-  const labelData = parseLabelData(rawText);
-
-  if (!detection && !labelData.year) {
-    return NextResponse.json({
-      success: false,
-      error:   "Could not read the label. Try a closer photo of just the label, or enter the cert number manually.",
-      rawText,
-    });
-  }
+  // ── OCR succeeded — build response ────────────────────────────────────────
+  const { detection, label } = ocrData;
 
   let apiData = null;
   if (detection?.grader === "PSA") {
     apiData = await lookupCert(detection.certNumber, "PSA").catch(() => null);
   }
 
-  const cardData = {
-    certNumber:   detection?.certNumber          ?? null,
-    grader:       detection?.grader              ?? "Unknown",
-    player:       apiData?.player   || labelData.player       || null,
-    year:         apiData?.year     || labelData.year         || null,
-    manufacturer: apiData?.manufacturer || labelData.manufacturer || null,
-    set:          apiData?.set      || labelData.set          || null,
-    subset:       apiData?.subset   || labelData.subset       || null,
-    cardNumber:   apiData?.cardNumber || labelData.cardNumber || null,
-    grade:        apiData?.grade    || labelData.grade        || null,
-    sport:        apiData?.sport                              || null,
-  };
-
   return NextResponse.json({
     success:    true,
     certNumber: detection?.certNumber ?? null,
     grader:     detection?.grader     ?? "Unknown",
-    cardData,
     source:     apiData ? "api+ocr" : "ocr",
-    rawText,
+    cardData: {
+      certNumber:      detection?.certNumber          ?? null,
+      grader:          detection?.grader              ?? "Unknown",
+      player:          apiData?.player   || label.player       || null,
+      year:            apiData?.year     || label.year         || null,
+      manufacturer:    apiData?.manufacturer || label.manufacturer || null,
+      set:             apiData?.set      || label.set          || null,
+      subset:          apiData?.subset   || label.subset       || null,
+      cardNumber:      apiData?.cardNumber || label.cardNumber || null,
+      grade:           apiData?.grade    || label.grade        || null,
+      sport:           apiData?.sport                         || null,
+      bgsSubCentering: label.bgsSubCentering ?? null,
+      bgsSubCorners:   label.bgsSubCorners   ?? null,
+      bgsSubEdges:     label.bgsSubEdges     ?? null,
+      bgsSubSurface:   label.bgsSubSurface   ?? null,
+    },
   });
 }

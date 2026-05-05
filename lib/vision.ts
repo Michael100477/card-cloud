@@ -25,14 +25,22 @@ Look at the GRADING LABEL — the small printed label on the slab (NOT the card 
 - cardNumber: the card number from the label (e.g. "170", "509", "87BJ")
 - grade: the numerical overall grade (e.g. "9.5", "8", "10")
 
+- bgsSubCentering: BGS centering subgrade number (e.g. 9, 9.5) — BGS/BGGS only, null for all other graders
+- bgsSubCorners: BGS corners subgrade — BGS/BGGS only
+- bgsSubEdges: BGS edges subgrade — BGS/BGGS only
+- bgsSubSurface: BGS surface subgrade — BGS/BGGS only
+
 Notes:
-- BGS labels show subgrades: CENTERING, CORNERS, EDGES, SURFACE — use the OVERALL grade (largest number shown separately)
+- BGS labels show subgrades: CENTERING, CORNERS, EDGES, SURFACE — extract all four; the OVERALL grade is shown separately (largest standalone number)
 - For BGS/BGGS, the Beckett logo may appear as a clear watermark — identify from subgrade labels
 - manufacturer and set are different: Topps makes Bowman Chrome; set = "Bowman Chrome", manufacturer = "Topps"
 - Return ONLY a JSON object. Use null for fields you cannot read.
 
-Example response:
-{"certNumber":"80239626","grader":"PSA","player":"Bo Jackson","year":1987,"manufacturer":"Topps","set":"Topps","subset":"Future Stars","cardNumber":"170","grade":"8"}`;
+Example PSA response:
+{"certNumber":"80239626","grader":"PSA","player":"Bo Jackson","year":1987,"manufacturer":"Topps","set":"Topps","subset":"Future Stars","cardNumber":"170","grade":"8","bgsSubCentering":null,"bgsSubCorners":null,"bgsSubEdges":null,"bgsSubSurface":null}
+
+Example BGS response:
+{"certNumber":"0013144244","grader":"BGS","player":"Bo Jackson","year":2017,"manufacturer":"Topps","set":"'87 Topps Silver Pack Chrome","subset":null,"cardNumber":"87BJ","grade":"9.5","bgsSubCentering":9,"bgsSubCorners":9.5,"bgsSubEdges":9.5,"bgsSubSurface":9.5}`;
 
 async function resizeForVision(imageBuffer: Buffer): Promise<{ data: string; mediaType: "image/jpeg" | "image/png" }> {
   // Resize to max 1568px (Anthropic's recommended max for vision) and convert to JPEG
@@ -47,16 +55,20 @@ async function resizeForVision(imageBuffer: Buffer): Promise<{ data: string; med
 }
 
 export interface VisionResult {
-  certNumber:   string | null;
-  grader:       string;
-  player:       string | null;
-  year:         number | null;
-  manufacturer: string | null;
-  set:          string | null;
-  subset:       string | null;
-  cardNumber:   string | null;
-  grade:        string | null;
-  sport:        string | null;
+  certNumber:      string | null;
+  grader:          string;
+  player:          string | null;
+  year:            number | null;
+  manufacturer:    string | null;
+  set:             string | null;
+  subset:          string | null;
+  cardNumber:      string | null;
+  grade:           string | null;
+  sport:           string | null;
+  bgsSubCentering: number | null;
+  bgsSubCorners:   number | null;
+  bgsSubEdges:     number | null;
+  bgsSubSurface:   number | null;
 }
 
 export async function readLabelWithVision(imageBuffer: Buffer): Promise<VisionResult | null> {
@@ -100,8 +112,12 @@ export async function readLabelWithVision(imageBuffer: Buffer): Promise<VisionRe
       set:          parsed.set          ?? null,
       subset:       parsed.subset       ?? null,
       cardNumber:   parsed.cardNumber   ? String(parsed.cardNumber) : null,
-      grade:        parsed.grade        ? String(parsed.grade) : null,
-      sport:        parsed.sport        ?? null,
+      grade:           parsed.grade        ? String(parsed.grade) : null,
+      sport:           parsed.sport        ?? null,
+      bgsSubCentering: parsed.bgsSubCentering != null ? parseFloat(parsed.bgsSubCentering) : null,
+      bgsSubCorners:   parsed.bgsSubCorners   != null ? parseFloat(parsed.bgsSubCorners)   : null,
+      bgsSubEdges:     parsed.bgsSubEdges     != null ? parseFloat(parsed.bgsSubEdges)     : null,
+      bgsSubSurface:   parsed.bgsSubSurface   != null ? parseFloat(parsed.bgsSubSurface)   : null,
     };
   } catch (err) {
     console.error("[vision]", err);

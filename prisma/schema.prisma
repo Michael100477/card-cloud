@@ -206,6 +206,12 @@ model Card {
   acquiredPrice  Decimal?  @db.Decimal(10, 2)
   acquiredSource String?
 
+  // BGS subgrades — only populated for BGS / BGGS graded cards
+  bgsSubCentering Decimal? @db.Decimal(4, 1)
+  bgsSubCorners   Decimal? @db.Decimal(4, 1)
+  bgsSubEdges     Decimal? @db.Decimal(4, 1)
+  bgsSubSurface   Decimal? @db.Decimal(4, 1)
+
   status         CardStatus @default(TRACKING)
   isPublic       Boolean    @default(false)
 

@@ -7,16 +7,20 @@
 export type GraderName = "PSA" | "BGS" | "BGGS" | "SGC" | "CGC" | "HGA" | "Unknown";
 
 export interface GraderCardData {
-  certNumber: string;
-  grader: GraderName;
-  player: string | null;
-  year: number | null;
-  manufacturer: string | null;
-  set: string | null;
-  subset: string | null;
-  cardNumber: string | null;
-  grade: string | null;
-  sport: string | null;
+  certNumber:      string;
+  grader:          GraderName;
+  player:          string | null;
+  year:            number | null;
+  manufacturer:    string | null;
+  set:             string | null;
+  subset:          string | null;
+  cardNumber:      string | null;
+  grade:           string | null;
+  sport:           string | null;
+  bgsSubCentering: number | null;
+  bgsSubCorners:   number | null;
+  bgsSubEdges:     number | null;
+  bgsSubSurface:   number | null;
 }
 
 // ─── Brand → Manufacturer lookup ─────────────────────────────────────────────
@@ -141,7 +145,11 @@ async function lookupPSA(certNumber: string): Promise<GraderCardData | null> {
       subset:       subsetName,
       cardNumber:   PSACert.CardNumber ?? null,
       grade,
-      sport:        PSACert.Sport      ?? null,
+      sport:           PSACert.Sport ?? null,
+      bgsSubCentering: null,
+      bgsSubCorners:   null,
+      bgsSubEdges:     null,
+      bgsSubSurface:   null,
     };
   } catch {
     return null;
@@ -157,6 +165,7 @@ async function lookupSGC(certNumber: string): Promise<GraderCardData | null> {
     certNumber, grader: "SGC",
     player: null, year: null, manufacturer: null,
     set: null, subset: null, cardNumber: null, grade: null, sport: null,
+    bgsSubCentering: null, bgsSubCorners: null, bgsSubEdges: null, bgsSubSurface: null,
   };
 }
 

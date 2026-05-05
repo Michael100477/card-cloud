@@ -36,14 +36,21 @@ export async function preprocessSlab(imageBuffer: Buffer): Promise<Buffer> {
 
 // ─── OCR via child process ────────────────────────────────────────────────────
 
+// Use PROJECT_ROOT env var so the path is correct when PM2 starts the server
+// from a different working directory (process.cwd() may return C:\ROOT).
+function projectRoot(): string {
+  return process.env.PROJECT_ROOT ?? process.cwd();
+}
+
 export async function extractText(imageBuffer: Buffer): Promise<string> {
   const processed  = await preprocessSlab(imageBuffer);
-  const workerPath = path.join(process.cwd(), "scripts", "ocr-worker.mjs");
+  const root       = projectRoot();
+  const workerPath = path.join(root, "scripts", "ocr-worker.mjs");
   const base64     = processed.toString("base64");
 
   return new Promise((resolve, reject) => {
     const child = spawn("node", [workerPath, base64], {
-      cwd:   process.cwd(),
+      cwd:   root,   // child process gets the correct working directory
       stdio: ["ignore", "pipe", "pipe"],
     });
 

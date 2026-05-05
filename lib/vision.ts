@@ -38,7 +38,10 @@ IMPORTANT for BGS/BGGS labels:
 
 Other notes:
 - For BGS/BGGS, the Beckett logo may appear as a clear watermark — identify from subgrade labels
-- manufacturer and set are different: Topps makes Bowman Chrome; set = "Bowman Chrome", manufacturer = "Topps"
+- manufacturer and set: Topps makes Bowman Chrome (manufacturer="Topps", set="Bowman Chrome")
+  For a plain "1987 TOPPS" label: manufacturer="Topps", set="Topps"
+  For "2017 TOPPS" base card: manufacturer="Topps", set="Topps"
+  Always populate manufacturer — it is the company name (Topps/Panini/Upper Deck/Fleer/Donruss)
 - Return ONLY a JSON object. Use null for fields you cannot read.
 
 Example PSA response:

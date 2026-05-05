@@ -28,7 +28,7 @@ export interface GraderCardData {
 // parent company. We derive the manufacturer so collectors see the right hierarchy:
 //   Manufacturer = Topps  |  Set = Bowman Chrome  |  Subset = Refractor
 
-function deriveManufacturer(brand: string): string | null {
+export function deriveManufacturer(brand: string): string | null {
   const b = brand.toUpperCase();
 
   // Topps and its brands

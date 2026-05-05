@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { readLabelWithVision } from "@/lib/vision";
 import { extractText, extractCertNumber, parseLabelData } from "@/lib/ocr";
-import { lookupCert } from "@/lib/graders";
+import { lookupCert, deriveManufacturer } from "@/lib/graders";
+
+// If manufacturer is null but we have a set name, try to derive the parent company.
+// e.g. set="Topps" → manufacturer="Topps", set="Bowman Chrome" → manufacturer="Topps"
+function resolveManufacturer(manufacturer: string | null, set: string | null): string | null {
+  if (manufacturer) return manufacturer;
+  if (!set) return null;
+  return deriveManufacturer(set) ?? set; // fall back to set name itself if unknown
+}
 
 const OCR_TIMEOUT_MS = 60_000;
 
@@ -64,7 +72,7 @@ export async function POST(req: NextRequest) {
             grader:          visionResult.grader,
             player:          apiData?.player       || visionResult.player       || null,
             year:            apiData?.year         || visionResult.year         || null,
-            manufacturer:    apiData?.manufacturer || visionResult.manufacturer || null,
+            manufacturer:    resolveManufacturer(apiData?.manufacturer || visionResult.manufacturer || null, apiData?.set || visionResult.set || null),
             set:             apiData?.set          || visionResult.set          || null,
             subset:          apiData?.subset       || visionResult.subset       || null,
             cardNumber:      apiData?.cardNumber   || visionResult.cardNumber   || null,
@@ -108,7 +116,7 @@ export async function POST(req: NextRequest) {
       grader:          detection?.grader              ?? "Unknown",
       player:          apiData?.player   || label.player       || null,
       year:            apiData?.year     || label.year         || null,
-      manufacturer:    apiData?.manufacturer || label.manufacturer || null,
+      manufacturer:    resolveManufacturer(apiData?.manufacturer || label.manufacturer || null, apiData?.set || label.set || null),
       set:             apiData?.set      || label.set          || null,
       subset:          apiData?.subset   || label.subset       || null,
       cardNumber:      apiData?.cardNumber || label.cardNumber || null,

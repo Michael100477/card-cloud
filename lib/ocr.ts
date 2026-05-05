@@ -140,11 +140,17 @@ export async function extractText(imageBuffer: Buffer): Promise<string> {
 
 export interface CertDetection {
   certNumber: string;
-  grader: "PSA" | "BGS" | "BGGS" | "SGC" | "CGC" | "Unknown";
+  grader: "PSA" | "BGS" | "BGGS" | "BCCG" | "SGC" | "CGC" | "Unknown";
 }
 
 export function extractCertNumber(ocrText: string): CertDetection | null {
   const text = ocrText.replace(/\s+/g, " ").toUpperCase();
+
+  // BCCG (Beckett Collector Club Grading) — no subgrades, simpler label
+  if (text.includes("BCCG")) {
+    const m = text.match(/(\d{10})(?!\d)/);
+    if (m) return { certNumber: m[1], grader: "BCCG" };
+  }
 
   // BGS/BGGS detection — the Beckett "B" logo is a clear watermark that OCR
   // often can't read. Detect by BGS-specific subgrade keywords instead.

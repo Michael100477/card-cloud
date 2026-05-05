@@ -4,7 +4,7 @@
  * Provider swappable — add credentials per grader in .env.
  */
 
-export type GraderName = "PSA" | "BGS" | "BGGS" | "SGC" | "CGC" | "HGA" | "Unknown";
+export type GraderName = "PSA" | "BGS" | "BGGS" | "BCCG" | "SGC" | "CGC" | "HGA" | "Unknown";
 
 export interface GraderCardData {
   certNumber:      string;
@@ -187,6 +187,6 @@ export async function lookupCert(
 ): Promise<GraderCardData | null> {
   switch (grader.toUpperCase()) {
     case "PSA":  return lookupPSA(certNumber);
-    default:     return null; // BGS, BGGS, SGC, CGC — use OCR label data
+    default:     return null; // BGS, BGGS, BCCG, SGC, CGC — use OCR label data
   }
 }

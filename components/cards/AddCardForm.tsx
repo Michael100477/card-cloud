@@ -11,7 +11,7 @@ import type { GraderCardData } from "@/lib/graders";
 
 const SPORTS = ["Baseball","Football","Basketball","Hockey","Soccer","Golf","Tennis","Boxing","MMA","NASCAR","Pokémon","Magic: The Gathering","Yu-Gi-Oh!","Other"];
 const MANUFACTURERS = ["Topps","Panini","Upper Deck","Bowman","Fleer","Donruss","Score","Leaf","Pacific","O-Pee-Chee","Stadium Club","Select","Prizm","Chrome","Finest","SPx"];
-const GRADE_COMPANIES = ["PSA","BGS","BGGS","SGC","CGC","HGA","Other"];
+const GRADE_COMPANIES = ["PSA","BGS","BGGS","BCCG","SGC","CGC","HGA","Other"];
 const GRADE_OPTIONS: Record<string, string[]> = {
   PSA: ["10","9.5","9","8.5","8","7.5","7","6","5","4","3","2","1.5","1"],
   BGS: ["10 (Black Label)","10 (Pristine)","9.5","9","8.5","8","7.5","7","6.5","6"],
@@ -687,7 +687,7 @@ const input = "w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm t
 
 // ─── SlabScanner ──────────────────────────────────────────────────────────────
 
-const GRADERS = ["PSA","BGS","BGGS","SGC","CGC","HGA"];
+const GRADERS = ["PSA","BGS","BGGS","BCCG","SGC","CGC","HGA"];
 
 function ResultCard({ result, onUse, onReset }: {
   result: GraderCardData;

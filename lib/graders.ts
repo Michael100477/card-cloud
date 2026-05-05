@@ -17,10 +17,16 @@ export interface GraderCardData {
 }
 
 // ─── PSA ─────────────────────────────────────────────────────────────────────
-// Free tier: 100 calls/day. Requires OAuth client credentials.
-// Docs: https://www.psacard.com/cert/api/
+// Free tier: 100 calls/day.
+// Supports two auth modes (whichever env vars are present):
+//   PSA_ACCESS_TOKEN — pre-issued bearer token (simplest)
+//   PSA_CLIENT_ID + PSA_CLIENT_SECRET — OAuth client credentials flow
 
 async function getPSAToken(): Promise<string | null> {
+  // Mode 1: pre-issued bearer token
+  if (process.env.PSA_ACCESS_TOKEN) return process.env.PSA_ACCESS_TOKEN;
+
+  // Mode 2: OAuth client credentials
   const id     = process.env.PSA_CLIENT_ID;
   const secret = process.env.PSA_CLIENT_SECRET;
   if (!id || !secret) return null;
@@ -30,9 +36,7 @@ async function getPSAToken(): Promise<string | null> {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        grant_type:    "client_credentials",
-        client_id:     id,
-        client_secret: secret,
+        grant_type: "client_credentials", client_id: id, client_secret: secret,
       }),
     });
     if (!res.ok) return null;

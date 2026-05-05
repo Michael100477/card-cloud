@@ -12,51 +12,58 @@ import path from "path";
 // ─── Image prep ───────────────────────────────────────────────────────────────
 
 async function enhanceForOCR(imgBuf: Buffer): Promise<Buffer> {
+  const meta = await sharp(imgBuf).metadata();
+  const w = meta.width ?? 800;
+
+  // Upscale aggressively if the crop is small so text is at least ~20px tall
+  const targetWidth = Math.max(1200, w * 2);
+
   return sharp(imgBuf)
     .grayscale()
     .normalize()
-    .sharpen({ sigma: 2 })                              // aggressive sharpen for small text
-    .resize({ width: 1400, withoutEnlargement: false }) // upscale small images
+    .sharpen({ sigma: 1 })                                          // gentle sharpen
+    .resize({ width: targetWidth, withoutEnlargement: false })
     .png()
     .toBuffer();
 }
 
 /**
- * Extract candidate label regions.
- * Graded slab labels live at the SHORT edge of the slab.
- *   Portrait (h > w): label is at the TOP → try top 25% and bottom 25%
- *   Landscape (w > h): label is on a SIDE → try left/right 25% rotated 90°
- * Returns crops ordered from most-likely to least-likely.
+ * Build candidate label crops from smallest (most focused) to largest.
+ * Slab labels are typically 8-20% of the slab's short edge.
+ * We try multiple sizes so we don't miss labels at various zoom levels.
+ * No EXIF auto-rotate — work with the image exactly as the user photographed it.
  */
 async function labelCrops(imageBuffer: Buffer): Promise<Buffer[]> {
-  // Auto-rotate via EXIF so portrait phones show correctly
-  const autoRotated = await sharp(imageBuffer).rotate().toBuffer();
-  const meta = await sharp(autoRotated).metadata();
+  const meta = await sharp(imageBuffer).metadata();
   const w = meta.width  ?? 1200;
   const h = meta.height ?? 1600;
 
   const crops: Buffer[] = [];
 
   if (h >= w) {
-    // Portrait — label most likely at TOP, then BOTTOM
-    const labelH = Math.floor(h * 0.25);
-    crops.push(
-      await sharp(autoRotated).extract({ left: 0, top: 0,          width: w, height: labelH }).toBuffer(),
-      await sharp(autoRotated).extract({ left: 0, top: h - labelH, width: w, height: labelH }).toBuffer(),
-    );
+    // Portrait — try multiple top-slice percentages (small → large)
+    for (const pct of [0.10, 0.15, 0.20, 0.28]) {
+      const sliceH = Math.floor(h * pct);
+      crops.push(await sharp(imageBuffer).extract({ left: 0, top: 0, width: w, height: sliceH }).toBuffer());
+    }
+    // Also try bottom slices (label could be at the bottom for some slabs)
+    for (const pct of [0.12, 0.18]) {
+      const sliceH = Math.floor(h * pct);
+      crops.push(await sharp(imageBuffer).extract({ left: 0, top: h - sliceH, width: w, height: sliceH }).toBuffer());
+    }
   } else {
-    // Landscape — label on LEFT or RIGHT
-    const labelW = Math.floor(w * 0.25);
-    crops.push(
-      await sharp(autoRotated).extract({ left: 0,         top: 0, width: labelW, height: h }).rotate(90).toBuffer(),
-      await sharp(autoRotated).extract({ left: w - labelW, top: 0, width: labelW, height: h }).rotate(-90).toBuffer(),
-    );
+    // Landscape — label on left or right edge, try both with rotation
+    for (const pct of [0.12, 0.18, 0.25]) {
+      const sliceW = Math.floor(w * pct);
+      crops.push(await sharp(imageBuffer).extract({ left: 0,        top: 0, width: sliceW, height: h }).rotate(90).toBuffer());
+      crops.push(await sharp(imageBuffer).extract({ left: w-sliceW, top: 0, width: sliceW, height: h }).rotate(-90).toBuffer());
+    }
   }
 
-  // Full image as last resort (at reduced size to limit noise)
+  // Full image last resort
   crops.push(
-    await sharp(autoRotated)
-      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: false })
+    await sharp(imageBuffer)
+      .resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: false })
       .toBuffer()
   );
 

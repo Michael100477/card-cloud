@@ -13,15 +13,20 @@ import type { LabelData } from "@/lib/ocr";
 
 const PROMPT = `This is a photo of a graded sports or trading card inside a protective slab.
 
-Look at the GRADING LABEL — the small printed label on the slab (NOT the card artwork itself). Extract these fields from the label:
+⚠ CRITICAL RULE: Extract ONLY information that is LITERALLY PRINTED on the grading label.
+Do NOT use your knowledge of cards to fill in missing information.
+Do NOT infer, guess, or assume any field from the player name or card identity.
+If a field is not printed on the label → return null for that field.
+
+Look at the GRADING LABEL — the small printed label on the slab (NOT the card artwork itself). Extract these fields from the label text only:
 
 - certNumber: the certification/serial number (usually 7-10 digits, e.g. "80239626" or "0013144244")
-- grader: the grading company (PSA / BGS / BGGS / SGC / CGC / HGA)
-- player: the player or card name (e.g. "Bo Jackson", "Mike Trout")
-- year: the card year as a number (e.g. 1987, 2017)
-- manufacturer: the parent company (Topps, Panini, Upper Deck, Fleer, etc.)
-- set: the specific product/set name (e.g. "Topps", "Bowman Chrome", "Prizm", "'87 Topps Silver Pack Chrome")
-- subset: any subset or variety (e.g. "Future Stars", "Refractor", "Artist's Proof", "Rookie Card")
+- grader: the grading company (PSA / BGS / BGGS / BCCG / SGC / CGC / HGA)
+- player: the player or card name as printed on the label
+- year: the card year as a number — ONLY if printed on the label
+- manufacturer: the parent company printed on the label (Topps, Panini, Upper Deck, Fleer, Classic, etc.)
+- set: the specific product/set name as printed on the label
+- subset: ONLY if a subset/variety is literally printed on the label (e.g. "Refractor", "Artist's Proof") — if not printed on the label, return null
 - cardNumber: the card number from the label (e.g. "170", "509", "87BJ")
 - grade: the numerical overall grade (e.g. "9.5", "8", "10")
 
@@ -44,7 +49,10 @@ Other notes:
   Always populate manufacturer — it is the company name (Topps/Panini/Upper Deck/Fleer/Donruss)
 - Return ONLY a JSON object. Use null for fields you cannot read.
 
-Example PSA response:
+Example PSA response (label shows "1987 TOPPS / BO JACKSON / #170 / NM-MT 8 / 80239626", no subset printed):
+{"certNumber":"80239626","grader":"PSA","player":"Bo Jackson","year":1987,"manufacturer":"Topps","set":"Topps","subset":null,"cardNumber":"170","grade":"8","bgsSubCentering":null,"bgsSubCorners":null,"bgsSubEdges":null,"bgsSubSurface":null}
+
+Example PSA response with subset (label shows "FUTURE STARS" printed on it):
 {"certNumber":"80239626","grader":"PSA","player":"Bo Jackson","year":1987,"manufacturer":"Topps","set":"Topps","subset":"Future Stars","cardNumber":"170","grade":"8","bgsSubCentering":null,"bgsSubCorners":null,"bgsSubEdges":null,"bgsSubSurface":null}
 
 Example BGS response:

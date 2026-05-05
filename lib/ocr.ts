@@ -48,10 +48,13 @@ export async function extractText(imageBuffer: Buffer): Promise<string> {
   const workerPath = path.join(root, "scripts", "ocr-worker.mjs");
   const base64     = processed.toString("base64");
 
+  // Pass image via stdin — NOT as a CLI argument.
+  // Base64 of a slab image can be 300–400 KB which exceeds Windows'
+  // 32,767-character command-line argument limit and silently fails.
   return new Promise((resolve, reject) => {
-    const child = spawn("node", [workerPath, base64], {
-      cwd:   root,   // child process gets the correct working directory
-      stdio: ["ignore", "pipe", "pipe"],
+    const child = spawn("node", [workerPath], {
+      cwd:   root,
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     let stdout = "";
@@ -60,17 +63,26 @@ export async function extractText(imageBuffer: Buffer): Promise<string> {
     child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
 
     child.on("close", (code) => {
-      if (stderr) console.warn("[ocr-worker stderr]", stderr.slice(0, 200));
+      if (stderr) console.warn("[ocr-worker stderr]", stderr.slice(0, 500));
       try {
         const result = JSON.parse(stdout);
         if (result.error) reject(new Error(result.error));
         else resolve(result.text ?? "");
       } catch {
-        reject(new Error(`OCR worker returned invalid output (exit ${code}): ${stdout.slice(0, 100)}`));
+        const preview = stdout.slice(0, 200);
+        console.error("[ocr-worker] bad output:", preview, "stderr:", stderr.slice(0, 200));
+        reject(new Error(`OCR worker exited (${code}): ${preview}`));
       }
     });
 
-    child.on("error", reject);
+    child.on("error", (err) => {
+      console.error("[ocr-worker spawn error]", err);
+      reject(err);
+    });
+
+    // Write base64 image to stdin and close the stream
+    child.stdin.write(base64);
+    child.stdin.end();
   });
 }
 

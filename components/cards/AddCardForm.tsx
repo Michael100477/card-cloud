@@ -262,6 +262,7 @@ export function AddCardForm({ collection }: Props) {
             if (data.year)         setField("year",         String(data.year));
             if (data.manufacturer) setField("manufacturer", data.manufacturer);
             if (data.set)          setField("set",          data.set);
+            if (data.subset)       setField("subset",       data.subset);
             if (data.cardNumber)   setField("cardNumber",   data.cardNumber);
             if (data.grade)        setField("grade",        data.grade);
             if (data.sport)        setField("sport",        data.sport);

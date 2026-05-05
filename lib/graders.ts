@@ -11,6 +11,7 @@ export interface GraderCardData {
   year: number | null;
   manufacturer: string | null;
   set: string | null;
+  subset: string | null;
   cardNumber: string | null;
   grade: string | null;
   sport: string | null;
@@ -57,23 +58,42 @@ async function lookupPSA(certNumber: string): Promise<GraderCardData | null> {
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!res.ok) return null;
-    const { PSACert } = await res.json();
+    const body = await res.json();
+    const PSACert = body.PSACert;
     if (!PSACert) return null;
 
-    // Parse grade number from description e.g. "GEM MT 10" → "10"
+    // Log full response once so we can see every field PSA provides
+    console.log("[PSA raw]", JSON.stringify(PSACert));
+
+    // Parse grade number from description e.g. "NM-MT 8" → "8"
     const gradeMatch = PSACert.GradeDescription?.match(/(\d+(?:\.\d+)?)\s*$/);
     const grade = gradeMatch ? gradeMatch[1] : PSACert.GradeDescription ?? null;
+
+    // SpecNumber is PSA's internal numeric catalog code — not human-readable.
+    // Leave set null so the user fills it in; their card label shows the set name.
+    // Variety (e.g. "FUTURE STARS") maps to subset.
+    const isNumericOnly = (v: unknown) =>
+      typeof v === "string" && /^\d+$/.test(v.trim());
+
+    const setName = isNumericOnly(PSACert.SpecNumber)
+      ? null
+      : (PSACert.SpecNumber ?? null);
+
+    const subset = PSACert.Variety && !isNumericOnly(PSACert.Variety)
+      ? PSACert.Variety
+      : null;
 
     return {
       certNumber,
       grader:       "PSA",
-      player:       PSACert.Subject     ?? null,
-      year:         PSACert.Year        ? parseInt(PSACert.Year) : null,
-      manufacturer: PSACert.Brand       ?? null,
-      set:          PSACert.SpecNumber  ?? null,
-      cardNumber:   PSACert.CardNumber  ?? null,
+      player:       PSACert.Subject    ?? null,
+      year:         PSACert.Year       ? parseInt(PSACert.Year) : null,
+      manufacturer: PSACert.Brand      ?? null,
+      set:          setName,
+      subset,
+      cardNumber:   PSACert.CardNumber ?? null,
       grade,
-      sport:        null, // PSA API doesn't always expose sport
+      sport:        PSACert.Sport      ?? null,
     };
   } catch {
     return null;
@@ -88,7 +108,7 @@ async function lookupSGC(certNumber: string): Promise<GraderCardData | null> {
   return {
     certNumber, grader: "SGC",
     player: null, year: null, manufacturer: null,
-    set: null, cardNumber: null, grade: null, sport: null,
+    set: null, subset: null, cardNumber: null, grade: null, sport: null,
   };
 }
 
@@ -97,7 +117,7 @@ async function lookupBGS(certNumber: string): Promise<GraderCardData | null> {
   return {
     certNumber, grader: "BGS",
     player: null, year: null, manufacturer: null,
-    set: null, cardNumber: null, grade: null, sport: null,
+    set: null, subset: null, cardNumber: null, grade: null, sport: null,
   };
 }
 
@@ -105,7 +125,7 @@ async function lookupCGC(certNumber: string): Promise<GraderCardData | null> {
   return {
     certNumber, grader: "CGC",
     player: null, year: null, manufacturer: null,
-    set: null, cardNumber: null, grade: null, sport: null,
+    set: null, subset: null, cardNumber: null, grade: null, sport: null,
   };
 }
 
@@ -123,7 +143,7 @@ export async function lookupCert(
     default:        return lookupPSA(certNumber) ?? { // try PSA as best guess
       certNumber, grader: "Unknown",
       player: null, year: null, manufacturer: null,
-      set: null, cardNumber: null, grade: null, sport: null,
+      set: null, subset: null, cardNumber: null, grade: null, sport: null,
     };
   }
 }

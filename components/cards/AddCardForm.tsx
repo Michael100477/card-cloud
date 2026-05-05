@@ -261,7 +261,7 @@ export function AddCardForm({ collection }: Props) {
       {/* Scan slab */}
       {tab === "scan" && (
         <SlabScanner
-          onDetected={(data) => {
+          onDetected={(data, photo) => {
             // Pre-fill form fields with whatever the grader API returned
             if (data.player)       setField("player",       data.player);
             if (data.year)         setField("year",         String(data.year));
@@ -280,6 +280,10 @@ export function AddCardForm({ collection }: Props) {
             if (data.bgsSubCorners   != null) setField("bgsSubCorners",   String(data.bgsSubCorners));
             if (data.bgsSubEdges     != null) setField("bgsSubEdges",     String(data.bgsSubEdges));
             if (data.bgsSubSurface   != null) setField("bgsSubSurface",   String(data.bgsSubSurface));
+            // Set the slab photo as the Front photo automatically
+            if (photo) {
+              setFrontPhoto({ file: photo, preview: URL.createObjectURL(photo) });
+            }
             setTab("manual"); // Switch to manual so user can review + save
           }}
         />
@@ -727,7 +731,7 @@ function ResultCard({ result, onUse, onReset }: {
   );
 }
 
-function SlabScanner({ onDetected }: { onDetected: (data: GraderCardData) => void }) {
+function SlabScanner({ onDetected }: { onDetected: (data: GraderCardData, photo?: File) => void }) {
   // Manual cert entry state
   const [certInput,    setCertInput]    = useState("");
   const [graderInput,  setGraderInput]  = useState("PSA");
@@ -874,7 +878,7 @@ function SlabScanner({ onDetected }: { onDetected: (data: GraderCardData) => voi
             )}
 
             {scanResult && (
-              <ResultCard result={scanResult} onUse={() => onDetected(scanResult)} onReset={resetScan} />
+              <ResultCard result={scanResult} onUse={() => onDetected(scanResult, image ?? undefined)} onReset={resetScan} />
             )}
 
             {!scanResult && (

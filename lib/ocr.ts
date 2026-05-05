@@ -289,14 +289,16 @@ export function parseLabelData(ocrText: string): LabelData {
   }
 
   // ── Player name (standalone all-caps line) ────────────────────────────────
+  // Require at least 3 chars per word to filter out OCR noise like "Li Ze Bn Ih"
   if (!result.player) {
     for (const line of lines) {
       const words = line.trim().toUpperCase().split(/\s+/);
       const ok =
         words.length >= 2 && words.length <= 4 &&
-        words.every(w => /^[A-Z\-'.]{2,}$/.test(w)) &&
+        words.every(w => /^[A-Z\-'.]{3,}$/.test(w)) &&  // ← 3+ chars, not 2+
         !words.some(w => NOT_A_NAME.has(w)) &&
-        !line.match(/\d/);
+        !line.match(/\d/) &&
+        line.trim().length >= 7; // full name must be at least 7 chars total
       if (ok) { result.player = tc(line.trim()); break; }
     }
   }

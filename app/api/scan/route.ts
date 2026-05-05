@@ -44,10 +44,13 @@ export async function POST(req: NextRequest) {
     const detection  = extractCertNumber(rawText);
     const labelData  = parseLabelData(rawText);
 
-    if (!detection && !labelData.player && !labelData.year) {
+    // Require at least a cert number OR a year to consider the scan valid.
+    // Player-only results are too prone to false positives from OCR noise.
+    const hasUsableData = !!detection || !!labelData.year;
+    if (!hasUsableData) {
       return NextResponse.json({
         success: false,
-        error:   "Could not read the label. Try a clearer close-up, or enter the cert number manually.",
+        error:   "Could not read the label. Try a clearer close-up of just the label, or enter the cert number manually.",
         rawText,
       });
     }

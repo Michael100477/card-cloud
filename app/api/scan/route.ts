@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { extractText, extractCertNumber } from "@/lib/ocr";
+import { extractText, extractCertNumber, parseLabelData } from "@/lib/ocr";
 import { lookupCert } from "@/lib/graders";
 
-// 120 s on first run (downloads ~4 MB language model from CDN).
-// Subsequent scans are fast — model is cached after instrumentation.ts pre-loads it.
 const OCR_TIMEOUT_MS = 120_000;
 
 export async function POST(req: NextRequest) {
@@ -16,14 +14,14 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file     = formData.get("image") as File | null;
 
-  if (!file)                         return NextResponse.json({ error: "No image provided." }, { status: 400 });
-  if (!file.type.startsWith("image/")) return NextResponse.json({ error: "File must be an image." }, { status: 400 });
-  if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: "Image must be under 20 MB." }, { status: 400 });
+  if (!file)                           return NextResponse.json({ error: "No image provided." },          { status: 400 });
+  if (!file.type.startsWith("image/")) return NextResponse.json({ error: "File must be an image." },      { status: 400 });
+  if (file.size > 20 * 1024 * 1024)   return NextResponse.json({ error: "Image must be under 20 MB." }, { status: 400 });
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // OCR with timeout — first run downloads the ~4 MB Tesseract eng model
+    // OCR the image
     let rawText: string;
     try {
       rawText = await Promise.race([
@@ -37,22 +35,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         error: isTimeout
-          ? "OCR timed out. The language model may still be downloading — try again in a moment, or enter the cert number manually."
+          ? "OCR timed out. Try again in a moment, or enter the cert number manually."
           : "OCR failed. Try a clearer photo or enter the cert number manually.",
       });
     }
 
-    const detection = extractCertNumber(rawText);
-    if (!detection) {
+    // Extract cert number — if not found, return the label parse anyway
+    const detection  = extractCertNumber(rawText);
+    const labelData  = parseLabelData(rawText);
+
+    if (!detection && !labelData.player && !labelData.year) {
       return NextResponse.json({
         success: false,
-        error: "No cert number found. Try a clearer close-up of the label, or enter the cert number manually.",
+        error:   "Could not read the label. Try a clearer close-up, or enter the cert number manually.",
         rawText,
       });
     }
 
-    const cardData = await lookupCert(detection.certNumber, detection.grader);
-    return NextResponse.json({ success: true, certNumber: detection.certNumber, grader: detection.grader, cardData, rawText });
+    // Optionally enrich with grader API — if it fails, label data is still returned
+    let apiData = null;
+    if (detection) {
+      apiData = await lookupCert(detection.certNumber, detection.grader).catch(() => null);
+    }
+
+    // Merge: API data takes precedence over label parse where both exist
+    const cardData = {
+      certNumber:   detection?.certNumber          ?? null,
+      grader:       detection?.grader              ?? "Unknown",
+      player:       apiData?.player   || labelData.player       || null,
+      year:         apiData?.year     || labelData.year         || null,
+      manufacturer: apiData?.manufacturer || labelData.manufacturer || null,
+      set:          apiData?.set      || labelData.set          || null,
+      subset:       apiData?.subset   || labelData.subset       || null,
+      cardNumber:   apiData?.cardNumber || labelData.cardNumber || null,
+      grade:        apiData?.grade    || labelData.grade        || null,
+      sport:        apiData?.sport                              || null,
+    };
+
+    return NextResponse.json({
+      success:    true,
+      certNumber: detection?.certNumber ?? null,
+      grader:     detection?.grader     ?? "Unknown",
+      cardData,
+      source:     apiData ? "api+label" : "label",
+      rawText,
+    });
 
   } catch (err) {
     console.error("[/api/scan]", err);

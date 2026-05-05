@@ -104,29 +104,47 @@ export interface CertDetection {
 export function extractCertNumber(ocrText: string): CertDetection | null {
   const text = ocrText.replace(/\s+/g, " ").toUpperCase();
 
-  // BGGS (Beckett Gold) — check before BGS since BGGS contains "BGS"
-  const bggsMatch = text.match(/(?:CERT[#\s]*|BGGS[#\s]*)?(\d{10})(?!\d)/);
-  if (bggsMatch && text.includes("BGGS")) return { certNumber: bggsMatch[1], grader: "BGGS" };
+  // BGS/BGGS detection — the Beckett "B" logo is a clear watermark that OCR
+  // often can't read. Instead, detect by BGS-specific subgrade keywords.
+  // Every BGS label shows CENTERING, CORNERS, EDGES, SURFACE.
+  const hasBGSSubgrades =
+    text.includes("CENTERING") && text.includes("CORNERS") &&
+    text.includes("EDGES")     && text.includes("SURFACE");
 
-  // BGS/Beckett: 10 consecutive digits
-  const bgsMatch = text.match(/(?:CERT[#\s]*|BGS[#\s]*)?(\d{10})(?!\d)/);
-  if (bgsMatch) return { certNumber: bgsMatch[1], grader: "BGS" };
+  // BGGS (Beckett Gold) — has same subgrades, check for GOLD label text
+  if (hasBGSSubgrades && (text.includes("BGGS") || text.includes("GOLD LABEL"))) {
+    const m = text.match(/(\d{10})(?!\d)/);
+    if (m) return { certNumber: m[1], grader: "BGGS" };
+  }
 
-  // PSA: 7–9 consecutive digits (e.g. 80239626 = 8 digits, 20881197 = 8 digits)
-  const psaMatch = text.match(/(?:CERT[#\s]*|PSA[#\s]*)?(\d{7,9})(?!\d)/);
-  if (psaMatch) return { certNumber: psaMatch[1], grader: "PSA" };
+  // BGS — detected via subgrades OR explicit "BGS" text
+  if (hasBGSSubgrades || text.includes("BECKETT")) {
+    const m = text.match(/(\d{10})(?!\d)/);
+    if (m) return { certNumber: m[1], grader: "BGS" };
+  }
 
-  // CGC: 10-digit
-  const cgcMatch = text.match(/(?:CGC[#\s]*)?(\d{10})(?!\d)/);
-  if (cgcMatch) return { certNumber: cgcMatch[1], grader: "CGC" };
+  // PSA — explicit label text OR 7–9 digit cert
+  if (text.includes("PSA")) {
+    const m = text.match(/(\d{7,9})(?!\d)/);
+    if (m) return { certNumber: m[1], grader: "PSA" };
+  }
 
-  // SGC: 8-digit
-  const sgcMatch = text.match(/(?:SGC[#\s]*)?(\d{8})(?!\d)/);
-  if (sgcMatch) return { certNumber: sgcMatch[1], grader: "SGC" };
+  // SGC — explicit label text OR 8-digit cert near "SGC"
+  if (text.includes("SGC")) {
+    const m = text.match(/(\d{8})(?!\d)/);
+    if (m) return { certNumber: m[1], grader: "SGC" };
+  }
 
-  // Last resort — any 7–10 digit block
-  const fallback = text.match(/\b(\d{7,10})\b/);
-  if (fallback) return { certNumber: fallback[1], grader: "Unknown" };
+  // CGC — explicit label text
+  if (text.includes("CGC")) {
+    const m = text.match(/(\d{10})(?!\d)/);
+    if (m) return { certNumber: m[1], grader: "CGC" };
+  }
+
+  // Fallback: infer grader from cert number length
+  const ten  = text.match(/\b(\d{10})\b/);   if (ten)  return { certNumber: ten[1],  grader: "BGS" };
+  const nine = text.match(/\b(\d{7,9})\b/);  if (nine) return { certNumber: nine[1], grader: "PSA" };
+  const eight = text.match(/\b(\d{8})\b/);   if (eight) return { certNumber: eight[1], grader: "SGC" };
 
   return null;
 }
@@ -183,6 +201,16 @@ export function parseLabelData(ocrText: string): LabelData {
     set: null, subset: null, cardNumber: null, grade: null,
   };
 
+  // ── BGS-specific: extract subgrades (CENTERING / CORNERS / EDGES / SURFACE) ─
+  // These appear on every BGS label. Parsing them now so they don't confuse
+  // the player-name detector (the numbers look like they could be grades).
+  const subgradeNums: number[] = [];
+  const centeringM = upper.match(/CENTERING\s+(\d+(?:\.\d+)?)/);
+  if (centeringM) subgradeNums.push(parseFloat(centeringM[1]));
+  const cornersM   = upper.match(/CORNERS\s+(\d+(?:\.\d+)?)/);
+  if (cornersM)   subgradeNums.push(parseFloat(cornersM[1]));
+  // (edges + surface tracked but not stored — overall grade is what matters)
+
   // ── Year ────────────────────────────────────────────────────────────────────
   const yearM = upper.match(/\b(19[0-9]{2}|20[0-2][0-9])\b/);
   if (yearM) result.year = parseInt(yearM[1]);
@@ -209,35 +237,72 @@ export function parseLabelData(ocrText: string): LabelData {
     if (m) { result.grade = m[1]; break; }
   }
 
-  // ── Year + Set from a line that starts with the year ─────────────────────────
-  // e.g. "1987 TOPPS", "2021 BOWMAN CHROME", "1994 PINNACLE"
-  for (const line of lines) {
-    const m = line.match(/^(19\d{2}|20\d{2})\s+(.{2,40})$/i);
+  // ── Year + Set/Manufacturer from a line that starts with the year ───────────
+  // e.g. "1987 TOPPS", "2021 BOWMAN CHROME", "2017 TOPPS"
+  // BGS labels: line 1 = "YEAR BRAND", line 2 = specific set name
+  let yearLineIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(19\d{2}|20\d{2})\s+(.{2,40})$/i);
     if (m) {
       result.year = parseInt(m[1]);
-      const setStr = m[2].trim().replace(/#.*$/, "").trim(); // strip card # if on same line
-      if (setStr.length > 1) {
-        result.set          = tc(setStr);
-        result.manufacturer = deriveManufacturerLocal(setStr) ?? tc(setStr);
+      const brandStr = m[2].trim().replace(/#.*$/, "").trim();
+      if (brandStr.length > 1) {
+        result.manufacturer = deriveManufacturerLocal(brandStr) ?? tc(brandStr);
+        // For PSA-style labels the brand IS the set; for BGS the next line has the set
+        result.set = tc(brandStr);
       }
+      yearLineIndex = i;
       break;
+    }
+  }
+
+  // BGS line 2: specific set name (e.g. "'87 TOPPS SILVER PACK CHROME")
+  // This overrides the brand-as-set when available
+  if (yearLineIndex >= 0 && yearLineIndex + 1 < lines.length) {
+    const nextLine = lines[yearLineIndex + 1].trim();
+    // It's a set name if it doesn't start with # and isn't a player name format
+    if (nextLine && !nextLine.startsWith("#") && !/^\d/.test(nextLine)) {
+      const nextUpper = nextLine.toUpperCase();
+      const isGradeLine = /CENTERING|CORNERS|EDGES|SURFACE|GEM|MINT/.test(nextUpper);
+      if (!isGradeLine) {
+        result.set = tc(nextLine);
+        // Derive manufacturer from this more specific line if not already set
+        const derivedMfr = deriveManufacturerLocal(nextLine);
+        if (derivedMfr) result.manufacturer = derivedMfr;
+      }
+    }
+  }
+
+  // ── BGS combined line: "#87BJ BO JACKSON" → cardNumber + player ─────────────
+  // BGS labels put the card number and player name on the same line.
+  // Format: #ALPHANUMERIC FIRSTNAME LASTNAME  (e.g. "#87BJ BO JACKSON")
+  if (!result.cardNumber || !result.player) {
+    for (const line of lines) {
+      const bgsLine = line.match(/^#([A-Z0-9]+)\s+([A-Z][A-Z\s\-'\.]{3,30})$/i);
+      if (bgsLine) {
+        if (!result.cardNumber) result.cardNumber = bgsLine[1];
+        if (!result.player) result.player = tc(bgsLine[2].trim());
+        break;
+      }
     }
   }
 
   // ── Player name ──────────────────────────────────────────────────────────────
   // Look for an all-caps line of 2-4 words that looks like a name.
   // Skip lines that contain brand/grading keywords.
-  for (const line of lines) {
-    const words = line.trim().toUpperCase().split(/\s+/);
-    const isName =
-      words.length >= 2 &&
-      words.length <= 4 &&
-      words.every(w => /^[A-Z\-'\.]{2,}$/.test(w)) &&
-      !words.some(w => NOT_A_NAME.has(w)) &&
-      !line.match(/\d/);                    // no digits in a name
-    if (isName) {
-      result.player = tc(line.trim());
-      break;
+  if (!result.player) {
+    for (const line of lines) {
+      const words = line.trim().toUpperCase().split(/\s+/);
+      const isName =
+        words.length >= 2 &&
+        words.length <= 4 &&
+        words.every(w => /^[A-Z\-'\.]{2,}$/.test(w)) &&
+        !words.some(w => NOT_A_NAME.has(w)) &&
+        !line.match(/\d/);
+      if (isName) {
+        result.player = tc(line.trim());
+        break;
+      }
     }
   }
 

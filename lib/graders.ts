@@ -115,9 +115,6 @@ async function lookupPSA(certNumber: string): Promise<GraderCardData | null> {
     const PSACert = body.PSACert;
     if (!PSACert) return null;
 
-    // Log full response once so we can see every field PSA provides
-    console.log("[PSA raw]", JSON.stringify(PSACert));
-
     // Parse grade number from description e.g. "NM-MT 8" → "8"
     const gradeMatch = PSACert.GradeDescription?.match(/(\d+(?:\.\d+)?)\s*$/);
     const grade = gradeMatch ? gradeMatch[1] : PSACert.GradeDescription ?? null;
@@ -135,7 +132,7 @@ async function lookupPSA(certNumber: string): Promise<GraderCardData | null> {
     return {
       certNumber,
       grader:       "PSA",
-      player:       PSACert.Subject    ?? null,
+      player:       PSACert.Subject ? titleCase(PSACert.Subject) : null,
       year:         PSACert.Year       ? parseInt(PSACert.Year) : null,
       manufacturer: mfr ?? setName,   // fall back to set name if manufacturer unknown
       set:          setName,

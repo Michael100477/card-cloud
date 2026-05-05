@@ -17,6 +17,59 @@ export interface GraderCardData {
   sport: string | null;
 }
 
+// ─── Brand → Manufacturer lookup ─────────────────────────────────────────────
+// PSA's Brand field is the product/set name (e.g. "BOWMAN CHROME"), not the
+// parent company. We derive the manufacturer so collectors see the right hierarchy:
+//   Manufacturer = Topps  |  Set = Bowman Chrome  |  Subset = Refractor
+
+function deriveManufacturer(brand: string): string | null {
+  const b = brand.toUpperCase();
+
+  // Topps and its brands
+  if (/\bTOPPS\b/.test(b))                 return "Topps";
+  if (/\bBOWMAN\b/.test(b))               return "Topps";
+  if (/\bSTADIUM CLUB\b/.test(b))          return "Topps";
+  if (/\bFINEST\b/.test(b))               return "Topps";
+  if (/\bHERITAGE\b/.test(b))             return "Topps";
+  if (/\bGYPSY QUEEN\b/.test(b))          return "Topps";
+  if (/\bOPENING DAY\b/.test(b))          return "Topps";
+  if (/\bGALLERY\b/.test(b))             return "Topps";
+  if (/\bARCHIVES\b/.test(b))            return "Topps";
+
+  // Panini and its brands
+  if (/\bPANINI\b/.test(b))               return "Panini";
+  if (/\bPRIZM\b/.test(b))               return "Panini";
+  if (/\bSELECT\b/.test(b))              return "Panini";
+  if (/\bDONRUSS\b/.test(b))             return "Panini";
+  if (/\bSCORE\b/.test(b))               return "Panini";
+  if (/\bOPTIC\b/.test(b))               return "Panini";
+  if (/\bCONTENDERS\b/.test(b))          return "Panini";
+  if (/\bNATIONAL TREASURES\b/.test(b))  return "Panini";
+  if (/\bIMMACULATE\b/.test(b))          return "Panini";
+  if (/\bFLAWLESS\b/.test(b))            return "Panini";
+  if (/\bMOSAIC\b/.test(b))              return "Panini";
+  if (/\bCROWN ROYALE\b/.test(b))        return "Panini";
+  if (/\bCHRONICLES\b/.test(b))          return "Panini";
+
+  // Upper Deck and its brands
+  if (/\bUPPER DECK\b/.test(b))           return "Upper Deck";
+  if (/\b\bSPX?\b/.test(b))               return "Upper Deck";
+  if (/\bARTIFACTS\b/.test(b))           return "Upper Deck";
+  if (/\bO-PEE-CHEE\b/.test(b))          return "Upper Deck";
+  if (/\bE-MOTION\b/.test(b))            return "Upper Deck";
+  if (/\bSP AUTHENTIC\b/.test(b))        return "Upper Deck";
+
+  // Fleer (independent brand before Panini acquisition)
+  if (/\bFLEER\b/.test(b))               return "Fleer";
+  if (/\bULTRA\b/.test(b))               return "Fleer";
+
+  return null; // unknown — user fills in manufacturer manually
+}
+
+function titleCase(s: string): string {
+  return s.toLowerCase().replace(/\b(\w)/g, c => c.toUpperCase());
+}
+
 // ─── PSA ─────────────────────────────────────────────────────────────────────
 // Free tier: 100 calls/day.
 // Supports two auth modes (whichever env vars are present):
@@ -69,28 +122,24 @@ async function lookupPSA(certNumber: string): Promise<GraderCardData | null> {
     const gradeMatch = PSACert.GradeDescription?.match(/(\d+(?:\.\d+)?)\s*$/);
     const grade = gradeMatch ? gradeMatch[1] : PSACert.GradeDescription ?? null;
 
-    // SpecNumber is PSA's internal numeric catalog code — not human-readable.
-    // Leave set null so the user fills it in; their card label shows the set name.
-    // Variety (e.g. "FUTURE STARS") maps to subset.
-    const isNumericOnly = (v: unknown) =>
-      typeof v === "string" && /^\d+$/.test(v.trim());
+    // Brand = PSA's product/set name (e.g. "BOWMAN CHROME", "TOPPS", "PRIZM").
+    // We title-case it for the set field and derive the parent manufacturer.
+    // Variety = subset variation (e.g. "FUTURE STARS", "REFRACTOR", "GOLD").
+    const rawBrand  = (PSACert.Brand ?? "").trim();
+    const rawVariety = (PSACert.Variety ?? "").trim();
 
-    const setName = isNumericOnly(PSACert.SpecNumber)
-      ? null
-      : (PSACert.SpecNumber ?? null);
-
-    const subset = PSACert.Variety && !isNumericOnly(PSACert.Variety)
-      ? PSACert.Variety
-      : null;
+    const setName    = rawBrand   ? titleCase(rawBrand)   : null;
+    const subsetName = rawVariety ? titleCase(rawVariety) : null;
+    const mfr        = deriveManufacturer(rawBrand);
 
     return {
       certNumber,
       grader:       "PSA",
       player:       PSACert.Subject    ?? null,
       year:         PSACert.Year       ? parseInt(PSACert.Year) : null,
-      manufacturer: PSACert.Brand      ?? null,
+      manufacturer: mfr ?? setName,   // fall back to set name if manufacturer unknown
       set:          setName,
-      subset,
+      subset:       subsetName,
       cardNumber:   PSACert.CardNumber ?? null,
       grade,
       sport:        PSACert.Sport      ?? null,

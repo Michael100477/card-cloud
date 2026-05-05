@@ -98,13 +98,17 @@ export async function extractText(imageBuffer: Buffer): Promise<string> {
 
 export interface CertDetection {
   certNumber: string;
-  grader: "PSA" | "BGS" | "SGC" | "CGC" | "Unknown";
+  grader: "PSA" | "BGS" | "BGGS" | "SGC" | "CGC" | "Unknown";
 }
 
 export function extractCertNumber(ocrText: string): CertDetection | null {
   const text = ocrText.replace(/\s+/g, " ").toUpperCase();
 
-  // BGS/Beckett: 10 consecutive digits (check before PSA)
+  // BGGS (Beckett Gold) — check before BGS since BGGS contains "BGS"
+  const bggsMatch = text.match(/(?:CERT[#\s]*|BGGS[#\s]*)?(\d{10})(?!\d)/);
+  if (bggsMatch && text.includes("BGGS")) return { certNumber: bggsMatch[1], grader: "BGGS" };
+
+  // BGS/Beckett: 10 consecutive digits
   const bgsMatch = text.match(/(?:CERT[#\s]*|BGS[#\s]*)?(\d{10})(?!\d)/);
   if (bgsMatch) return { certNumber: bgsMatch[1], grader: "BGS" };
 

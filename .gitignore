@@ -43,5 +43,8 @@ next-env.d.ts
 
 /app/generated/prisma
 
+# Tesseract language model — download with: node scripts/download-tessdata.mjs
+/tessdata/
+
 # uploaded card photos (local dev — replaced by R2 in production)
 /public/uploads/

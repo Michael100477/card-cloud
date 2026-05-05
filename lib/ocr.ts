@@ -1,57 +1,70 @@
 /**
  * OCR pipeline for slab label reading.
- * Uses sharp for preprocessing and tesseract.js for text extraction.
- * Self-hosted — zero per-scan cost (spec §11).
+ *
+ * tesseract.js breaks inside Next.js's bundler because its internal worker
+ * script path resolves to the wrong directory (C:\ROOT instead of project root).
+ * The fix: spawn a standalone Node.js child process (scripts/ocr-worker.mjs)
+ * that runs in a clean module context where path resolution works correctly.
+ *
+ * The Tesseract English language model is stored locally in tessdata/ so
+ * there is no CDN download at runtime.
  */
 
 import sharp from "sharp";
-import { createWorker } from "tesseract.js";
+import { spawn } from "child_process";
+import path from "path";
 
 // ─── Image preprocessing ──────────────────────────────────────────────────────
-// Key insight: PSA/BGS/SGC/CGC labels are always in the top strip of the slab.
-// Cropping to just that area dramatically reduces image size and OCR time.
+// Crop to the label area (top 22%) before OCR — the cert label on PSA/BGS/SGC/CGC
+// slabs is always in the top strip. This reduces a 1936×3273px image to ~430px
+// tall, dramatically cutting OCR time and improving accuracy.
 
 export async function preprocessSlab(imageBuffer: Buffer): Promise<Buffer> {
   const meta = await sharp(imageBuffer).metadata();
-  const w = meta.width  ?? 1200;
-  const h = meta.height ?? 1600;
-
-  // Crop to top 22% — that's where the cert label lives on all major graders
-  const labelH = Math.floor(h * 0.22);
+  const w    = meta.width  ?? 1200;
+  const h    = meta.height ?? 1600;
 
   return sharp(imageBuffer)
-    .extract({ left: 0, top: 0, width: w, height: labelH }) // crop to label
-    .grayscale()                                              // remove colour noise
-    .normalize()                                              // auto-contrast
-    .sharpen({ sigma: 1.5 })                                 // sharpen edges
-    .resize({ width: 1200, withoutEnlargement: false })      // upscale for Tesseract
+    .extract({ left: 0, top: 0, width: w, height: Math.floor(h * 0.22) })
+    .grayscale()
+    .normalize()
+    .sharpen({ sigma: 1.5 })
+    .resize({ width: 1200, withoutEnlargement: false })
     .png()
     .toBuffer();
 }
 
-// ─── OCR ──────────────────────────────────────────────────────────────────────
+// ─── OCR via child process ────────────────────────────────────────────────────
 
 export async function extractText(imageBuffer: Buffer): Promise<string> {
-  const processed = await preprocessSlab(imageBuffer);
+  const processed  = await preprocessSlab(imageBuffer);
+  const workerPath = path.join(process.cwd(), "scripts", "ocr-worker.mjs");
+  const base64     = processed.toString("base64");
 
-  // createWorker downloads the eng language model (~4 MB) on first run.
-  // Subsequent calls use the cached file so they're fast.
-  const worker = await createWorker("eng", 1, {
-    // Suppress verbose Tesseract progress logs
-    logger: () => {},
-  });
-
-  try {
-    await worker.setParameters({
-      tessedit_char_whitelist:
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-./ ",
+  return new Promise((resolve, reject) => {
+    const child = spawn("node", [workerPath, base64], {
+      cwd:   process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
-    const { data } = await worker.recognize(processed);
-    return data.text;
-  } finally {
-    await worker.terminate();
-  }
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
+    child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+    child.on("close", (code) => {
+      if (stderr) console.warn("[ocr-worker stderr]", stderr.slice(0, 200));
+      try {
+        const result = JSON.parse(stdout);
+        if (result.error) reject(new Error(result.error));
+        else resolve(result.text ?? "");
+      } catch {
+        reject(new Error(`OCR worker returned invalid output (exit ${code}): ${stdout.slice(0, 100)}`));
+      }
+    });
+
+    child.on("error", reject);
+  });
 }
 
 // ─── Cert number extraction ───────────────────────────────────────────────────
@@ -64,7 +77,7 @@ export interface CertDetection {
 export function extractCertNumber(ocrText: string): CertDetection | null {
   const text = ocrText.replace(/\s+/g, " ").toUpperCase();
 
-  // BGS/Beckett: 10 consecutive digits (check before PSA to avoid mis-match)
+  // BGS/Beckett: 10 consecutive digits (check before PSA)
   const bgsMatch = text.match(/(?:CERT[#\s]*|BGS[#\s]*)?(\d{10})(?!\d)/);
   if (bgsMatch) return { certNumber: bgsMatch[1], grader: "BGS" };
 
@@ -87,11 +100,10 @@ export function extractCertNumber(ocrText: string): CertDetection | null {
   return null;
 }
 
-// Detect grader from cert number format alone (used for manual cert entry)
+// Detect grader from cert number format (used for manual cert entry)
 export function detectGraderFromCert(certNumber: string): CertDetection["grader"] {
   const n = certNumber.replace(/\D/g, "");
-  if (n.length === 10) return "BGS";   // BGS and CGC both use 10 digits
-  if (n.length === 8)  return "PSA";   // PSA typically 8 digits
-  if (n.length === 7 || n.length === 9) return "PSA";
+  if (n.length === 10) return "BGS";
+  if (n.length >= 7 && n.length <= 9) return "PSA";
   return "Unknown";
 }

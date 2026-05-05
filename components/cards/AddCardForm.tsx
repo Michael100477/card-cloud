@@ -814,7 +814,7 @@ function SlabScanner({ onDetected }: { onDetected: (data: GraderCardData) => voi
         <p className="text-navy font-semibold mb-1">Scan the slab label</p>
         <p className="text-slate-400 text-sm mb-3">
           Photograph the cert label. OCR reads the cert number automatically.
-          {" "}<span className="text-slate-300">(First scan downloads language data — may take 30s)</span>
+          {" "}<span className="text-slate-300">(On first server start, the language model downloads in the background — if it times out, wait a minute and try again.)</span>
         </p>
 
         {!image ? (

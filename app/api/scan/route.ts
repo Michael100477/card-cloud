@@ -3,7 +3,9 @@ import { auth } from "@/auth";
 import { extractText, extractCertNumber } from "@/lib/ocr";
 import { lookupCert } from "@/lib/graders";
 
-const OCR_TIMEOUT_MS = 30_000; // 30 s — first run downloads language data
+// 120 s on first run (downloads ~4 MB language model from CDN).
+// Subsequent scans are fast — model is cached after instrumentation.ts pre-loads it.
+const OCR_TIMEOUT_MS = 120_000;
 
 export async function POST(req: NextRequest) {
   const session = await auth();

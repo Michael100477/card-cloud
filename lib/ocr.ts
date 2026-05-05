@@ -7,32 +7,44 @@
 import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 
-// ─── Image preprocessing ─────────────────────────────────────────────────────
-// Simplified version of the spec's 8-step pipeline.
-// Improves Tesseract accuracy from ~60% to ~85%+ on slab labels.
+// ─── Image preprocessing ──────────────────────────────────────────────────────
+// Key insight: PSA/BGS/SGC/CGC labels are always in the top strip of the slab.
+// Cropping to just that area dramatically reduces image size and OCR time.
 
 export async function preprocessSlab(imageBuffer: Buffer): Promise<Buffer> {
+  const meta = await sharp(imageBuffer).metadata();
+  const w = meta.width  ?? 1200;
+  const h = meta.height ?? 1600;
+
+  // Crop to top 22% — that's where the cert label lives on all major graders
+  const labelH = Math.floor(h * 0.22);
+
   return sharp(imageBuffer)
-    .grayscale()                         // Step 3: remove colour noise
-    .normalize()                         // Step 4: auto-contrast (CLAHE-like)
-    .sharpen({ sigma: 1.5 })            // Step 6: denoise / sharpen edges
-    .resize({ width: 1200, withoutEnlargement: false }) // Step 7: upscale
-    .png()                               // lossless for OCR
+    .extract({ left: 0, top: 0, width: w, height: labelH }) // crop to label
+    .grayscale()                                              // remove colour noise
+    .normalize()                                              // auto-contrast
+    .sharpen({ sigma: 1.5 })                                 // sharpen edges
+    .resize({ width: 1200, withoutEnlargement: false })      // upscale for Tesseract
+    .png()
     .toBuffer();
 }
 
-// ─── OCR ─────────────────────────────────────────────────────────────────────
+// ─── OCR ──────────────────────────────────────────────────────────────────────
 
 export async function extractText(imageBuffer: Buffer): Promise<string> {
   const processed = await preprocessSlab(imageBuffer);
-  const worker = await createWorker("eng");
+
+  // createWorker downloads the eng language model (~4 MB) on first run.
+  // Subsequent calls use the cached file so they're fast.
+  const worker = await createWorker("eng", 1, {
+    // Suppress verbose Tesseract progress logs
+    logger: () => {},
+  });
 
   try {
-    // Restrict character set — cert numbers are alphanumeric + a few symbols
     await worker.setParameters({
       tessedit_char_whitelist:
         "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-./ ",
-      // PSM 6 = uniform text block — best for slab labels
     });
 
     const { data } = await worker.recognize(processed);
@@ -43,7 +55,6 @@ export async function extractText(imageBuffer: Buffer): Promise<string> {
 }
 
 // ─── Cert number extraction ───────────────────────────────────────────────────
-// Each grader stamps cert numbers in a recognisable format.
 
 export interface CertDetection {
   certNumber: string;
@@ -53,15 +64,15 @@ export interface CertDetection {
 export function extractCertNumber(ocrText: string): CertDetection | null {
   const text = ocrText.replace(/\s+/g, " ").toUpperCase();
 
-  // PSA: 7–9 consecutive digits, often preceded by "CERT#" or "PSA"
-  const psaMatch = text.match(/(?:CERT[#\s]*|PSA[#\s]*)?(\d{7,9})(?!\d)/);
-  if (psaMatch) return { certNumber: psaMatch[1], grader: "PSA" };
-
-  // BGS/Beckett: 10 consecutive digits
+  // BGS/Beckett: 10 consecutive digits (check before PSA to avoid mis-match)
   const bgsMatch = text.match(/(?:CERT[#\s]*|BGS[#\s]*)?(\d{10})(?!\d)/);
   if (bgsMatch) return { certNumber: bgsMatch[1], grader: "BGS" };
 
-  // CGC: 10-digit, sometimes with leading zeros, often "CGC" nearby
+  // PSA: 7–9 consecutive digits (80239626 = 8 digits)
+  const psaMatch = text.match(/(?:CERT[#\s]*|PSA[#\s]*)?(\d{7,9})(?!\d)/);
+  if (psaMatch) return { certNumber: psaMatch[1], grader: "PSA" };
+
+  // CGC: 10-digit with leading zeros
   const cgcMatch = text.match(/(?:CGC[#\s]*)?(\d{10})(?!\d)/);
   if (cgcMatch) return { certNumber: cgcMatch[1], grader: "CGC" };
 
@@ -69,9 +80,18 @@ export function extractCertNumber(ocrText: string): CertDetection | null {
   const sgcMatch = text.match(/(?:SGC[#\s]*)?(\d{8})(?!\d)/);
   if (sgcMatch) return { certNumber: sgcMatch[1], grader: "SGC" };
 
-  // Last resort — any 7–10 digit block
+  // Last resort
   const fallback = text.match(/\b(\d{7,10})\b/);
   if (fallback) return { certNumber: fallback[1], grader: "Unknown" };
 
   return null;
+}
+
+// Detect grader from cert number format alone (used for manual cert entry)
+export function detectGraderFromCert(certNumber: string): CertDetection["grader"] {
+  const n = certNumber.replace(/\D/g, "");
+  if (n.length === 10) return "BGS";   // BGS and CGC both use 10 digits
+  if (n.length === 8)  return "PSA";   // PSA typically 8 digits
+  if (n.length === 7 || n.length === 9) return "PSA";
+  return "Unknown";
 }

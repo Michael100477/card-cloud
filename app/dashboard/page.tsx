@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { CollectionsGrid } from "@/components/collections/CollectionsGrid";
+import { PortfolioStats } from "@/components/dashboard/PortfolioStats";
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [rawCollections, cardCount] = await Promise.all([
+  const [rawCollections, cardCount, user] = await Promise.all([
     db.collection.findMany({
       where:   { ownerId: session.user.id },
       orderBy: { createdAt: "desc" },
@@ -23,6 +24,10 @@ export default async function DashboardPage() {
       },
     }),
     db.card.count({ where: { ownerId: session.user.id } }),
+    db.user.findUnique({
+      where:  { id: session.user.id },
+      select: { createdAt: true },
+    }),
   ]);
 
   // Serialise Prisma Decimal → number before passing to client components
@@ -37,25 +42,16 @@ export default async function DashboardPage() {
     })),
   }));
 
-  const totalCollections = collections.length;
+  const accountCreatedAt = user?.createdAt.toISOString() ?? new Date().toISOString();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      {/* Portfolio stats strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        {[
-          { label: "Collections",     value: totalCollections.toString() },
-          { label: "Total cards",     value: cardCount.toString() },
-          { label: "Est. value",      value: "$—" },
-          { label: "30-day change",   value: "—" },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-white rounded-2xl px-5 py-4 border border-slate-100">
-            <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">{stat.label}</p>
-            <p className="text-navy text-2xl font-bold mt-1">{stat.value}</p>
-          </div>
-        ))}
-      </div>
+      <PortfolioStats
+        collectionCount={collections.length}
+        cardCount={cardCount}
+        accountCreatedAt={accountCreatedAt}
+      />
 
       {/* Collections grid */}
       <div className="flex items-center justify-between mb-4">
@@ -66,4 +62,3 @@ export default async function DashboardPage() {
     </div>
   );
 }
-

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import { recordSnapshot } from "@/lib/snapshots";
 
 async function requireAuth() {
   const session = await auth();
@@ -77,6 +78,8 @@ export async function createCardAction(data: CreateCardInput) {
           data: { cardId: card.id, collectionId: data.collectionId },
         });
         revalidatePath(`/dashboard/collections/${data.collectionId}`);
+        // Record value snapshot — non-blocking, runs after card is linked
+        void recordSnapshot(data.collectionId);
       }
     }
 
@@ -151,6 +154,9 @@ export async function removeFromCollectionAction(cardId: string, collectionId: s
   if (remaining === 0) {
     await db.card.delete({ where: { id: cardId } });
   }
+
+  // Record snapshot of the collection's new value after removal
+  void recordSnapshot(collectionId);
 
   revalidatePath(`/dashboard/collections/${collectionId}`);
   revalidatePath("/dashboard");

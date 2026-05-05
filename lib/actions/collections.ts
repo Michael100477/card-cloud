@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { recordSnapshot } from "@/lib/snapshots";
 
 function slugify(name: string) {
   return name
@@ -46,6 +47,9 @@ export async function createCollectionAction(formData: FormData) {
   const collection = await db.collection.create({
     data: { ownerId: userId, name, description, slug, isPublic },
   });
+
+  // Baseline snapshot — establishes day-zero value ($0, 0 cards)
+  void recordSnapshot(collection.id);
 
   revalidatePath("/dashboard");
   redirect(`/dashboard/collections/${collection.id}`);

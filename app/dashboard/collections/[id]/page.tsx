@@ -14,7 +14,7 @@ export default async function CollectionDetailPage({ params }: Props) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [collection, rawSnapshots] = await Promise.all([
+  const [collection, rawSnapshots, user] = await Promise.all([
     db.collection.findUnique({
       where: { id },
       include: {
@@ -39,6 +39,10 @@ export default async function CollectionDetailPage({ params }: Props) {
       where: { collectionId: id },
       orderBy: { capturedAt: "asc" },
       select: { id: true, totalValue: true, cardCount: true, capturedAt: true },
+    }),
+    db.user.findUnique({
+      where: { id: session.user.id },
+      select: { createdAt: true },
     }),
   ]);
 
@@ -117,7 +121,11 @@ export default async function CollectionDetailPage({ params }: Props) {
 
       {/* Value history */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-        <ValueHistory collectionId={id} snapshots={snapshots} />
+        <ValueHistory
+          collectionId={id}
+          snapshots={snapshots}
+          accountCreatedAt={user?.createdAt.toISOString() ?? new Date().toISOString()}
+        />
       </div>
     </div>
   );

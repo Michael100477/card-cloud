@@ -160,91 +160,24 @@ async function lookupSGC(certNumber: string): Promise<GraderCardData | null> {
   };
 }
 
-// ─── BGS / BGGS (Beckett Grading Services) ───────────────────────────────────
-// Beckett doesn't publish a free public API. We attempt their internal
-// cert-verify endpoint; if it fails or changes, we fall back to cert-only.
-// BGS = standard label. BGGS = Gold label. Same cert system, same lookup.
-
-async function lookupBGS(
-  certNumber: string,
-  graderLabel: "BGS" | "BGGS" = "BGS"
-): Promise<GraderCardData | null> {
-  // Normalise cert — Beckett uses 10-digit numbers, sometimes zero-padded
-  const cert = certNumber.replace(/\D/g, "").padStart(10, "0");
-
-  try {
-    const res = await fetch(
-      `https://www.beckett.com/api/grading/cert-lookup/${cert}`,
-      {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible)", "Accept": "application/json" },
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
-
-    if (res.ok) {
-      const data = await res.json();
-      const cert_data = data?.cert ?? data?.PSACert ?? data;
-
-      if (cert_data && typeof cert_data === "object") {
-        const rawBrand   = String(cert_data.brand    ?? cert_data.Brand   ?? "").trim();
-        const rawVariety = String(cert_data.variety  ?? cert_data.Variety ?? "").trim();
-        const rawPlayer  = String(cert_data.subject  ?? cert_data.Subject ?? cert_data.playerName ?? "").trim();
-        const rawGrade   = String(cert_data.grade    ?? cert_data.Grade   ?? cert_data.GradeDescription ?? "").trim();
-
-        // Grade: strip the "BGS" prefix Beckett sometimes includes, keep number
-        const gradeMatch = rawGrade.match(/(\d+(?:\.\d+)?)\s*$/);
-        const grade = gradeMatch ? gradeMatch[1] : (rawGrade || null);
-
-        return {
-          certNumber,
-          grader:       graderLabel,
-          player:       rawPlayer ? titleCase(rawPlayer)   : null,
-          year:         cert_data.year ? parseInt(String(cert_data.year)) : null,
-          manufacturer: rawBrand ? (deriveManufacturer(rawBrand) ?? titleCase(rawBrand)) : null,
-          set:          rawBrand   ? titleCase(rawBrand)   : null,
-          subset:       rawVariety ? titleCase(rawVariety) : null,
-          cardNumber:   String(cert_data.cardNumber ?? cert_data.CardNumber ?? "").trim() || null,
-          grade,
-          sport:        null,
-        };
-      }
-    }
-  } catch {
-    // Beckett endpoint unavailable or format changed — cert-only fallback below
-  }
-
-  // Cert-only fallback — user fills in card details manually
-  return {
-    certNumber, grader: graderLabel,
-    player: null, year: null, manufacturer: null,
-    set: null, subset: null, cardNumber: null, grade: null, sport: null,
-  };
-}
-
-async function lookupCGC(certNumber: string): Promise<GraderCardData | null> {
-  return {
-    certNumber, grader: "CGC",
-    player: null, year: null, manufacturer: null,
-    set: null, subset: null, cardNumber: null, grade: null, sport: null,
-  };
-}
+// ─── Graders without a public API ────────────────────────────────────────────
+// BGS / BGGS (Beckett): no public API — card data comes from OCR label parsing.
+// SGC: no public API — card data comes from OCR label parsing.
+// CGC: no public API — card data comes from OCR label parsing.
+//
+// These functions return null so the scan route falls back to parseLabelData().
+// If Beckett or SGC ever publish an official API, add the implementation here.
 
 // ─── Router ───────────────────────────────────────────────────────────────────
+// PSA: always try the API (token configured in PSA_ACCESS_TOKEN env var).
+// All other graders: return null → OCR label parsing fills the card fields.
 
 export async function lookupCert(
   certNumber: string,
   grader: string
 ): Promise<GraderCardData | null> {
   switch (grader.toUpperCase()) {
-    case "PSA":              return lookupPSA(certNumber);
-    case "BGS":              return lookupBGS(certNumber, "BGS");
-    case "BGGS":             return lookupBGS(certNumber, "BGGS"); // Beckett Gold
-    case "SGC":              return lookupSGC(certNumber);
-    case "CGC":              return lookupCGC(certNumber);
-    default:                 return lookupPSA(certNumber) ?? {
-      certNumber, grader: "Unknown",
-      player: null, year: null, manufacturer: null,
-      set: null, subset: null, cardNumber: null, grade: null, sport: null,
-    };
+    case "PSA":  return lookupPSA(certNumber);
+    default:     return null; // BGS, BGGS, SGC, CGC — use OCR label data
   }
 }

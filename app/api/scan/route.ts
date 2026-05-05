@@ -52,10 +52,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Optionally enrich with grader API — if it fails, label data is still returned
+    // PSA: enrich with API data (we have a working token).
+    // All other graders: label parsing is the sole source — no API exists.
     let apiData = null;
-    if (detection) {
-      apiData = await lookupCert(detection.certNumber, detection.grader).catch(() => null);
+    if (detection?.grader === "PSA") {
+      apiData = await lookupCert(detection.certNumber, "PSA").catch(() => null);
     }
 
     // Merge: API data takes precedence over label parse where both exist

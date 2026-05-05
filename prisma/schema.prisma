@@ -212,6 +212,7 @@ model Card {
   bgsSubEdges     Decimal? @db.Decimal(4, 1)
   bgsSubSurface   Decimal? @db.Decimal(4, 1)
 
+  isFeatured     Boolean    @default(false)  // admin-curated showcase on landing page
   status         CardStatus @default(TRACKING)
   isPublic       Boolean    @default(false)
 

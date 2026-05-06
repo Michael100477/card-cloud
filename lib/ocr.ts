@@ -73,17 +73,23 @@ async function labelCrops(imageBuffer: Buffer): Promise<Buffer[]> {
 
 // ─── OCR child process ────────────────────────────────────────────────────────
 
+// Python executable path — set PYTHON_PATH in .env to override
+function pythonExe(): string {
+  return process.env.PYTHON_PATH
+    ?? "C:\\Users\\mikea\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
+}
+
 function projectRoot(): string {
   return process.env.PROJECT_ROOT ?? process.cwd();
 }
 
 async function runOCR(imageBuffer: Buffer): Promise<string> {
   const root       = projectRoot();
-  const workerPath = path.join(root, "scripts", "ocr-worker.mjs");
+  const workerPath = path.join(root, "scripts", "paddle-ocr-worker.py");
   const base64     = imageBuffer.toString("base64");
 
   return new Promise((resolve, reject) => {
-    const child = spawn("node", [workerPath], {
+    const child = spawn(pythonExe(), [workerPath], {
       cwd:   root,
       stdio: ["pipe", "pipe", "pipe"],
     });

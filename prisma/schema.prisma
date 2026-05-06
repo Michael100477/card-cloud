@@ -107,6 +107,7 @@ model User {
   bio              String?
   location         String?
   isPublic         Boolean   @default(false)
+  trainingConsent  Boolean   @default(false)  // user consents to scan images being used for model training
 
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -140,6 +141,29 @@ model Collection {
   @@index([ownerId])
   @@unique([ownerId, slug])
   @@map("collections")
+}
+
+// Training data collected from user scans (when trainingConsent = true)
+model TrainingExample {
+  id            String   @id @default(cuid())
+  imageKey      String   // R2 object key for the stored image
+  source        String   // "scan" | "manual_card" | "ebay_agent"
+  grader        String?
+  certNumber    String?
+  player        String?
+  year          Int?
+  manufacturer  String?
+  set           String?
+  subset        String?
+  cardNumber    String?
+  grade         String?
+  verified      Boolean  @default(false) // human-reviewed and confirmed correct
+  reviewedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([source])
+  @@index([verified])
+  @@map("training_examples")
 }
 
 model CollectionSnapshot {

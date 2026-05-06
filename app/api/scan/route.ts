@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { readLabelWithVision } from "@/lib/vision";
 import { extractText, extractCertNumber, parseLabelData } from "@/lib/ocr";
 import { lookupCert, deriveManufacturer } from "@/lib/graders";
+import { logTrainingExample } from "@/lib/training";
 
 // If manufacturer is null but we have a set name, try to derive the parent company.
 // e.g. set="Topps" → manufacturer="Topps", set="Bowman Chrome" → manufacturer="Topps"
@@ -43,58 +44,18 @@ export async function POST(req: NextRequest) {
     const detection = extractCertNumber(rawText);
     const label     = parseLabelData(rawText);
 
-    // OCR is only "good enough" if it found the key identifying fields.
-    // Finding just a cert or just a year means OCR read partial data —
-    // fall through to Vision which will fill in the complete picture.
-    const ocrIsComplete = !!detection &&
-      !!label.player &&
-      !!(label.manufacturer || label.set);
-
-    if (ocrIsComplete) {
+    // Accept OCR result if it found a cert number OR a year
+    // (PaddleOCR is accurate enough that partial results are still useful)
+    if (detection || label.year) {
       ocrData = { detection, label };
     }
   } catch {
-    // OCR timed out or failed — fall through to vision
+    // OCR timed out or failed
   }
 
-  // ── Path 2: Claude Vision (only if OCR failed) ────────────────────────────
-  if (!ocrData && process.env.ANTHROPIC_API_KEY) {
-    try {
-      const visionResult = await readLabelWithVision(buffer);
-
-      if (visionResult && (visionResult.certNumber || visionResult.year)) {
-        let apiData = null;
-        if (visionResult.certNumber && visionResult.grader === "PSA") {
-          apiData = await lookupCert(visionResult.certNumber, "PSA").catch(() => null);
-        }
-
-        return NextResponse.json({
-          success: true,
-          certNumber: visionResult.certNumber,
-          grader:     visionResult.grader,
-          source:     "vision",
-          cardData: {
-            certNumber:      visionResult.certNumber,
-            grader:          visionResult.grader,
-            player:          apiData?.player       || visionResult.player       || null,
-            year:            apiData?.year         || visionResult.year         || null,
-            manufacturer:    resolveManufacturer(apiData?.manufacturer || visionResult.manufacturer || null, apiData?.set || visionResult.set || null),
-            set:             apiData?.set          || visionResult.set          || null,
-            subset:          apiData?.subset       || visionResult.subset       || null,
-            cardNumber:      apiData?.cardNumber   || visionResult.cardNumber   || null,
-            grade:           apiData?.grade        || visionResult.grade        || null,
-            sport:           apiData?.sport        || visionResult.sport        || null,
-            bgsSubCentering: visionResult.bgsSubCentering ?? null,
-            bgsSubCorners:   visionResult.bgsSubCorners   ?? null,
-            bgsSubEdges:     visionResult.bgsSubEdges     ?? null,
-            bgsSubSurface:   visionResult.bgsSubSurface   ?? null,
-          },
-        });
-      }
-    } catch (err) {
-      console.error("[scan vision]", err);
-    }
-  }
+  // ── Path 2: Claude Vision — DISABLED while testing PaddleOCR ────────────
+  // To re-enable: uncomment this block and remove the early return above.
+  // Vision fallback is in lib/vision.ts, ready to restore when needed.
 
   // ── No usable data from either path ──────────────────────────────────────
   if (!ocrData) {
@@ -112,26 +73,57 @@ export async function POST(req: NextRequest) {
     apiData = await lookupCert(detection.certNumber, "PSA").catch(() => null);
   }
 
+  const cardData = {
+    certNumber:      detection?.certNumber          ?? null,
+    grader:          detection?.grader              ?? "Unknown",
+    player:          apiData?.player   || label.player       || null,
+    year:            apiData?.year     || label.year         || null,
+    manufacturer:    resolveManufacturer(apiData?.manufacturer || label.manufacturer || null, apiData?.set || label.set || null),
+    set:             apiData?.set      || label.set          || null,
+    subset:          apiData?.subset   || label.subset       || null,
+    cardNumber:      apiData?.cardNumber || label.cardNumber || null,
+    grade:           apiData?.grade    || label.grade        || null,
+    sport:           apiData?.sport                         || null,
+    bgsSubCentering: label.bgsSubCentering ?? null,
+    bgsSubCorners:   label.bgsSubCorners   ?? null,
+    bgsSubEdges:     label.bgsSubEdges     ?? null,
+    bgsSubSurface:   label.bgsSubSurface   ?? null,
+  };
+
+  // Log training example (non-blocking, respects user consent)
+  void logTrainingExample(buffer, {
+    source:       "scan",
+    grader:       cardData.grader       ?? undefined,
+    certNumber:   cardData.certNumber   ?? undefined,
+    player:       cardData.player       ?? undefined,
+    year:         cardData.year         ?? undefined,
+    manufacturer: cardData.manufacturer ?? undefined,
+    set:          cardData.set          ?? undefined,
+    subset:       cardData.subset       ?? undefined,
+    cardNumber:   cardData.cardNumber   ?? undefined,
+    grade:        cardData.grade        ?? undefined,
+  }, session.user.id);
+
   return NextResponse.json({
     success:    true,
-    certNumber: detection?.certNumber ?? null,
-    grader:     detection?.grader     ?? "Unknown",
+    certNumber: cardData.certNumber,
+    grader:     cardData.grader,
     source:     apiData ? "api+ocr" : "ocr",
     cardData: {
-      certNumber:      detection?.certNumber          ?? null,
-      grader:          detection?.grader              ?? "Unknown",
-      player:          apiData?.player   || label.player       || null,
-      year:            apiData?.year     || label.year         || null,
-      manufacturer:    resolveManufacturer(apiData?.manufacturer || label.manufacturer || null, apiData?.set || label.set || null),
-      set:             apiData?.set      || label.set          || null,
-      subset:          apiData?.subset   || label.subset       || null,
-      cardNumber:      apiData?.cardNumber || label.cardNumber || null,
-      grade:           apiData?.grade    || label.grade        || null,
-      sport:           apiData?.sport                         || null,
-      bgsSubCentering: label.bgsSubCentering ?? null,
-      bgsSubCorners:   label.bgsSubCorners   ?? null,
-      bgsSubEdges:     label.bgsSubEdges     ?? null,
-      bgsSubSurface:   label.bgsSubSurface   ?? null,
+      certNumber:      cardData.certNumber,
+      grader:          cardData.grader,
+      player:          cardData.player,
+      year:            cardData.year,
+      manufacturer:    cardData.manufacturer,
+      set:             cardData.set,
+      subset:          cardData.subset,
+      cardNumber:      cardData.cardNumber,
+      grade:           cardData.grade,
+      sport:           cardData.sport,
+      bgsSubCentering: cardData.bgsSubCentering,
+      bgsSubCorners:   cardData.bgsSubCorners,
+      bgsSubEdges:     cardData.bgsSubEdges,
+      bgsSubSurface:   cardData.bgsSubSurface,
     },
   });
 }

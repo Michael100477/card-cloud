@@ -143,6 +143,27 @@ model Collection {
   @@map("collections")
 }
 
+// Sets queued for TCDB scraping
+model SetScrapeQueue {
+  id          String   @id @default(cuid())
+  setName     String                        // e.g. "2024 Topps Chrome Baseball"
+  year        Int
+  manufacturer String
+  tcdbSetId   String?                       // TCDB internal set ID once found
+  source      String   @default("monitor") // "monitor" | "manual"
+  status      String   @default("pending") // "pending" | "scraping" | "done" | "failed"
+  cardCount   Int?                          // total cards in set
+  scrapedCount Int     @default(0)
+  discoveredAt DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  notes       String?
+
+  @@index([status])
+  @@index([year])
+  @@map("set_scrape_queue")
+}
+
 // Training data collected from user scans (when trainingConsent = true)
 model TrainingExample {
   id            String   @id @default(cuid())

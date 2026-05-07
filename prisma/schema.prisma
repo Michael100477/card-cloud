@@ -143,21 +143,67 @@ model Collection {
   @@map("collections")
 }
 
+// ─────────────────────────────────────────
+// Customer service email threads
+// ─────────────────────────────────────────
+
+model EmailThread {
+  id          String   @id @default(cuid())
+  subject     String
+  fromEmail   String
+  fromName    String?
+  type        String   @default("inbound")  // "inbound" | "outbound"
+  category    String?                        // "support" | "partnership" | "billing" | "other"
+  status      String   @default("open")     // "open" | "resolved" | "escalated" | "draft"
+  escalated   Boolean  @default(false)
+  escalationReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  messages    EmailMessage[]
+
+  @@index([status])
+  @@index([fromEmail])
+  @@map("email_threads")
+}
+
+model EmailMessage {
+  id        String      @id @default(cuid())
+  threadId  String
+  thread    EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role      String      // "user" | "agent" | "human"
+  body      String      @db.Text
+  sentAt    DateTime    @default(now())
+  providerId String?    // email provider message ID
+
+  @@index([threadId])
+  @@map("email_messages")
+}
+
 // Sets queued for TCDB scraping
 model SetScrapeQueue {
-  id          String   @id @default(cuid())
-  setName     String                        // e.g. "2024 Topps Chrome Baseball"
-  year        Int
+  id           String    @id @default(cuid())
+  setName      String                         // e.g. "2024 Topps Chrome Baseball"
+  year         Int
   manufacturer String
-  tcdbSetId   String?                       // TCDB internal set ID once found
-  source      String   @default("monitor") // "monitor" | "manual"
-  status      String   @default("pending") // "pending" | "scraping" | "done" | "failed"
-  cardCount   Int?                          // total cards in set
-  scrapedCount Int     @default(0)
-  discoveredAt DateTime @default(now())
-  startedAt   DateTime?
-  completedAt DateTime?
-  notes       String?
+  sport        String?
+  tcdbSetId    String?                        // TCDB internal set ID once found
+  source       String    @default("monitor")  // "monitor" | "manual"
+
+  // Status flow: announced → waiting_release → checking_tcdb → scraping → done | failed
+  status       String    @default("announced")
+  releaseDate  DateTime?                      // actual release date from announcement
+  checkCount   Int       @default(0)         // how many times we've checked TCDB
+  lastChecked  DateTime?
+  tcdbCardCount    Int?                       // total cards on TCDB checklist
+  tcdbImagesFound  Int   @default(0)         // images available so far
+  imageThreshold   Int   @default(70)        // % of cards that must have images before scraping
+
+  cardCount    Int?
+  scrapedCount Int       @default(0)
+  discoveredAt DateTime  @default(now())
+  startedAt    DateTime?
+  completedAt  DateTime?
+  notes        String?
 
   @@index([status])
   @@index([year])

@@ -4,6 +4,9 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { CollectionView } from "@/components/cards/CollectionView";
 import { ValueHistory } from "@/components/collections/ValueHistory";
+import { ShareButtons } from "@/components/social/ShareButtons";
+import { CommentSection } from "@/components/social/CommentSection";
+import { FollowButton } from "@/components/social/FollowButton";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -18,7 +21,15 @@ export default async function CollectionDetailPage({ params }: Props) {
     db.collection.findUnique({
       where: { id },
       include: {
-        _count: { select: { cards: true } },
+        _count:     { select: { cards: true, followers: true } },
+        followers:  { where: { userId: session.user.id }, select: { userId: true } },
+        owner: {
+          select: {
+            id: true, displayName: true, username: true,
+            _count: { select: { followers: true } },
+            followers: { where: { followerId: session.user.id }, select: { followerId: true } },
+          },
+        },
         cards: {
           orderBy: { addedAt: "desc" },
           include: {
@@ -46,9 +57,11 @@ export default async function CollectionDetailPage({ params }: Props) {
     }),
   ]);
 
-  if (!collection || collection.ownerId !== session.user.id) notFound();
+  if (!collection) notFound();
 
-  // Serialize Decimal fields — Prisma Decimal can't cross the server→client boundary
+  const isOwner = collection.ownerId === session.user.id;
+  if (!collection.isPublic && !isOwner) notFound();
+
   const cards = collection.cards.map(({ card }) => ({
     ...card,
     estimatedValue: card.estimatedValue ? Number(card.estimatedValue) : null,
@@ -56,38 +69,43 @@ export default async function CollectionDetailPage({ params }: Props) {
   }));
 
   const snapshots = rawSnapshots.map(s => ({
-    id:          s.id,
-    totalValue:  Number(s.totalValue),
-    cardCount:   s.cardCount,
-    capturedAt:  s.capturedAt.toISOString(),
+    id:         s.id,
+    totalValue: Number(s.totalValue),
+    cardCount:  s.cardCount,
+    capturedAt: s.capturedAt.toISOString(),
   }));
 
-  // Latest snapshot value for the hero (falls back to summing loaded cards)
   const latestValue = snapshots.length > 0
     ? snapshots[snapshots.length - 1].totalValue
     : cards.reduce((sum, c) => sum + (c.estimatedValue ?? 0), 0);
+
+  const ownerName            = collection.owner.displayName ?? collection.owner.username ?? "a collector";
+  const isFollowingCollection = collection.followers.length > 0;
+  const collectionFollowerCount = collection._count.followers;
+  const isFollowingOwner      = collection.owner.followers.length > 0;
+  const ownerFollowerCount    = collection.owner._count.followers;
 
   return (
     <div>
       {/* Collection hero */}
       <div className="bg-navy px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-7xl mx-auto">
-          {/* Breadcrumb */}
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-1.5 text-sky-highlight/70 hover:text-sky-highlight text-sm mb-4 transition-colors"
-          >
-            <ChevronLeftIcon className="w-4 h-4" />
-            My Collections
-          </Link>
+          <nav className="flex items-center gap-2 text-sm text-sky-highlight/70 mb-4">
+            <Link href="/dashboard" className="hover:text-sky-highlight transition-colors">Home</Link>
+            <span>/</span>
+            <Link href="/dashboard/my-collections" className="hover:text-sky-highlight transition-colors">My Collections</Link>
+          </nav>
 
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
               <h1 className="text-white text-2xl sm:text-3xl font-bold">{collection.name}</h1>
+              {!isOwner && (
+                <p className="text-sky-highlight/60 text-sm mt-0.5">by {ownerName}</p>
+              )}
               {collection.description && (
                 <p className="text-sky-highlight text-sm mt-1">{collection.description}</p>
               )}
-              <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-3 mt-2 flex-wrap">
                 <span className="text-sky-highlight/70 text-sm">
                   {collection._count.cards} {collection._count.cards === 1 ? "card" : "cards"}
                 </span>
@@ -95,6 +113,14 @@ export default async function CollectionDetailPage({ params }: Props) {
                 <span className="text-sky-highlight/70 text-sm">
                   Est. {latestValue > 0 ? `$${latestValue.toLocaleString()}` : "$—"}
                 </span>
+                {collectionFollowerCount > 0 && (
+                  <>
+                    <span className="text-sky-highlight/40">·</span>
+                    <span className="text-sky-highlight/70 text-sm">
+                      {collectionFollowerCount} {collectionFollowerCount === 1 ? "follower" : "followers"}
+                    </span>
+                  </>
+                )}
                 {collection.isPublic && (
                   <>
                     <span className="text-sky-highlight/40">·</span>
@@ -106,25 +132,72 @@ export default async function CollectionDetailPage({ params }: Props) {
               </div>
             </div>
 
-            <Link
-              href={`/dashboard/cards/new?collection=${id}`}
-              className="bg-amber text-amber-dark font-semibold px-5 py-2.5 rounded-xl text-sm hover:brightness-105 transition-all whitespace-nowrap self-start sm:self-auto"
-            >
-              + Add card
-            </Link>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+              {/* Follow collection — non-owners only */}
+              {!isOwner && (
+                <FollowButton
+                  type="collection"
+                  targetId={id}
+                  initialFollowing={isFollowingCollection}
+                  initialCount={collectionFollowerCount}
+                  compact
+                />
+              )}
+
+              {/* Follow the owner — non-owners only */}
+              {!isOwner && (
+                <FollowButton
+                  type="user"
+                  targetId={collection.owner.id}
+                  targetName={ownerName}
+                  initialFollowing={isFollowingOwner}
+                  initialCount={ownerFollowerCount}
+                />
+              )}
+
+              {/* Share buttons */}
+              <div className="[&_button]:border-white/20 [&_button]:text-white/60 [&_button]:hover:text-white [&_span]:text-amber-300 [&_span]:bg-amber-900/40 [&_span]:border-amber-700">
+                <ShareButtons
+                  title={`${collection.name} — ${ownerName}'s collection on Card Cloud`}
+                  description={`${collection._count.cards} cards · Est. $${latestValue.toLocaleString()}`}
+                  isPublic={collection.isPublic}
+                />
+              </div>
+
+              {/* Add card — owner only */}
+              {isOwner && (
+                <Link
+                  href={`/dashboard/cards/new?collection=${id}`}
+                  className="bg-amber text-amber-dark font-semibold px-5 py-2.5 rounded-xl text-sm hover:brightness-105 transition-all whitespace-nowrap"
+                >
+                  + Add card
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Content */}
+      {/* Card grid */}
       <CollectionView cards={cards} collectionId={id} />
 
-      {/* Value history */}
+      {/* Value history — owner only */}
+      {isOwner && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+          <ValueHistory
+            collectionId={id}
+            snapshots={snapshots}
+            accountCreatedAt={user?.createdAt.toISOString() ?? new Date().toISOString()}
+          />
+        </div>
+      )}
+
+      {/* Comments */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
-        <ValueHistory
+        <CommentSection
           collectionId={id}
-          snapshots={snapshots}
-          accountCreatedAt={user?.createdAt.toISOString() ?? new Date().toISOString()}
+          currentUserId={session.user.id}
+          isOwner={isOwner}
         />
       </div>
     </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { CardCloudMark } from "@/components/brand/CardCloudLogo";
 
 interface DashboardNavProps {
   username: string | null;
@@ -14,8 +15,14 @@ interface DashboardNavProps {
 }
 
 const NAV_LINKS = [
-  { label: "My Cards",  href: "/dashboard" },
-  { label: "Trade",     href: "/dashboard/trade" },
+  { label: "Home",           href: "/dashboard" },
+  { label: "Feed",           href: "/dashboard/feed" },
+  { label: "My Collections", href: "/dashboard/my-collections" },
+  { label: "Watchlist",      href: "/dashboard/watchlist" },
+  { label: "Following",      href: "/dashboard/following" },
+  { label: "Consign",        href: "/dashboard/consign" },
+  { label: "Sell",           href: "/exchange/sell" },
+  { label: "Trade",          href: "/dashboard/trade" },
 ];
 
 export function DashboardNav({ username, displayName, email, profilePhoto }: DashboardNavProps) {
@@ -45,11 +52,12 @@ export function DashboardNav({ username, displayName, email, profilePhoto }: Das
         <div className="flex items-center justify-between h-15" style={{ height: "60px" }}>
 
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0">
-            <CardStackIcon className="w-6 h-6 text-amber" />
-            <span className="text-sm">
-              <span className="text-white/60 font-normal">The </span>
-              <span className="text-brand font-bold text-base">Card Cloud</span>
+          <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
+            <CardCloudMark size={32} />
+            <span className="text-sm leading-none">
+              <span className="text-white/55 font-normal">The </span>
+              <span className="text-white font-bold tracking-tight">Card </span>
+              <span className="text-amber font-bold tracking-tight">Cloud</span>
             </span>
           </Link>
 
@@ -116,12 +124,28 @@ export function DashboardNav({ username, displayName, email, profilePhoto }: Das
                   View profile
                 </Link>
                 <Link
+                  href="/dashboard/consignments"
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  onClick={() => setDropdownOpen(false)}
+                >
+                  <BoxIcon className="w-4 h-4 text-slate-400" />
+                  My Consignments
+                </Link>
+                <Link
                   href="/dashboard/settings"
                   className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                   onClick={() => setDropdownOpen(false)}
                 >
                   <SettingsIcon className="w-4 h-4 text-slate-400" />
                   Settings
+                </Link>
+                <Link
+                  href="/support"
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  onClick={() => setDropdownOpen(false)}
+                >
+                  <SupportIcon className="w-4 h-4 text-slate-400" />
+                  Support
                 </Link>
 
                 <div className="border-t border-slate-100 mt-1 pt-1">
@@ -175,6 +199,24 @@ function SettingsIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function BoxIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+    </svg>
+  );
+}
+function SupportIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
   );
 }

@@ -21,9 +21,18 @@ export default async function NewCardPage({ searchParams }: Props) {
     });
   }
 
+  // When no collection is pre-selected, pass all collections so the form can show a picker
+  const collections = !collection
+    ? await db.collection.findMany({
+        where:   { ownerId: session.user.id },
+        select:  { id: true, name: true },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
-      <AddCardForm collection={collection} />
+      <AddCardForm collection={collection} collections={collections} />
     </div>
   );
 }

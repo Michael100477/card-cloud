@@ -45,8 +45,9 @@ Browser ──> Railway (Next.js app + Postgres)
 5. The Account ID is shown on every R2 page in the right sidebar →
    `R2_ACCOUNT_ID`. Also visible in the URL of the R2 dashboard.
 
-You now have all 5 R2 env vars. Save them somewhere safe — Cloudflare will
-not show the secret again.
+You now have all 5 R2 values. These go into the admin dashboard
+(Platform → Credentials → Storage) — they are NOT Railway env vars. See the
+"R2 credentials" subsection under step 2.6 below.
 
 ### 2. Railway
 
@@ -66,7 +67,6 @@ not show the secret again.
      update later when DNS is cut over
    - `NEXT_PUBLIC_BASE_URL` and `NEXT_PUBLIC_APP_URL` — same value as `NEXTAUTH_URL`
    - `ADMIN_EMAIL` — `virus860@gmail.com`
-   - All 5 `R2_*` vars from step 1
    - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
    - `ANTHROPIC_API_KEY`
    - `PSA_ACCESS_TOKEN`
@@ -76,6 +76,17 @@ not show the secret again.
    - `RECEIVE_TOKEN_SECRET` — generate with `openssl rand -base64 32`
    - `EMAIL_WEBHOOK_SECRET` — generate with `openssl rand -base64 32`
 7. Hit **Deploy** (or push any commit to `main` to retrigger).
+
+**R2 credentials (separate from Railway env vars):** Once the app is deployed
+and you can log in as the admin, go to **Admin → Platform → Credentials →
+Storage** and fill in the five R2 fields from step 1:
+   - `r2_account_id` — 32-char hex
+   - `r2_access_key` — R2 API token access key
+   - `r2_secret_key` — R2 API token secret
+   - `r2_bucket` — `cardcloud-photos`
+   - `r2_public_url` — `https://pub-<hash>.r2.dev` (no trailing slash)
+
+Save. Photo uploads switch to R2 immediately — no app restart needed.
 
 ### 3. Update Google OAuth for the Railway URL
 

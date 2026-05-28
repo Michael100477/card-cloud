@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   const filename = `${randomBytes(16).toString("hex")}${ext}`;
 
   // Production: Cloudflare R2. Local dev: write to public/uploads.
-  if (r2Configured()) {
+  if (await r2Configured()) {
     const url = await uploadToR2({
       key:         `uploads/${filename}`,
       body:        buffer,

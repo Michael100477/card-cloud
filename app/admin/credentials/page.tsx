@@ -58,10 +58,11 @@ const SEED: { service: string; label: string; group: string; hint?: string; auto
   { service: "ebay_return_policy_id_prod",        label: "Return Policy ID",        group: "eBay — Production", auto: true },
   { service: "ebay_payment_policy_id_prod",       label: "Payment Policy ID",       group: "eBay — Production", auto: true },
   // Storage
-  { service: "r2_account_id",  label: "Cloudflare R2 Account ID", group: "Storage" },
+  { service: "r2_account_id",  label: "Cloudflare R2 Account ID", group: "Storage", hint: "32-char hex string from R2 bucket's S3 API URL" },
   { service: "r2_access_key",  label: "R2 Access Key ID",         group: "Storage" },
   { service: "r2_secret_key",  label: "R2 Secret Access Key",     group: "Storage" },
-  { service: "r2_bucket",      label: "R2 Bucket Name",           group: "Storage", hint: "card-cloud-images" },
+  { service: "r2_bucket",      label: "R2 Bucket Name",           group: "Storage", hint: "e.g. cardcloud-photos" },
+  { service: "r2_public_url",  label: "R2 Public URL",            group: "Storage", hint: "https://pub-<hash>.r2.dev (or custom domain) — no trailing slash" },
   // AI / ML
   { service: "anthropic_api_key", label: "Anthropic API Key",            group: "AI / ML",      hint: "sk-ant-..." },
   { service: "ollama_url",        label: "Ollama Base URL",              group: "AI / ML",      hint: "http://localhost:11434" },

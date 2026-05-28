@@ -8,11 +8,13 @@
  * Storage: images go to R2 under training-data/{source}/{id}.jpg
  * Database: TrainingExample row with metadata + image key
  *
- * Note: R2 upload is a no-op until CLOUDFLARE_R2_* env vars are set.
- * Images are still logged to the DB so you know what to upload later.
+ * Note: R2 upload is a no-op until R2 credentials are filled in under
+ * Admin → Credentials → Storage. Images are still logged to the DB so
+ * you know what to upload later.
  */
 
 import { db } from "@/lib/db";
+import { r2Configured, uploadToR2 } from "@/lib/r2";
 
 export interface TrainingMeta {
   source:      "scan" | "manual_card" | "ebay_agent";
@@ -78,19 +80,9 @@ export async function logTrainingExample(
 }
 
 async function uploadToTrainingStorage(buffer: Buffer, key: string): Promise<void> {
-  // R2 upload — wired up when Cloudflare R2 credentials are configured
-  const accountId  = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
-  const accessKey  = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
-  const secretKey  = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
-  const bucket     = process.env.CLOUDFLARE_R2_BUCKET ?? "card-cloud-photos";
-
-  if (!accountId || !accessKey || !secretKey) {
-    // R2 not configured yet — image key is logged to DB, upload later
+  if (!(await r2Configured())) {
     console.log(`[training] R2 not configured — key logged: ${key}`);
     return;
   }
-
-  // Will be replaced with proper R2 SDK when we wire up R2
-  // For now, this is a placeholder that compiles cleanly
-  console.log(`[training] Would upload to R2: ${bucket}/${key} (${buffer.length} bytes)`);
+  await uploadToR2({ key, body: buffer, contentType: "image/jpeg" });
 }

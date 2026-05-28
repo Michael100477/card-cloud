@@ -37,6 +37,7 @@ export interface CreateCardInput {
   acquiredPrice?: number;
   acquiredSource?: string;
   collectionId?: string;
+  isPublic?: boolean;
 }
 
 export async function createCardAction(data: CreateCardInput) {
@@ -73,6 +74,7 @@ export async function createCardAction(data: CreateCardInput) {
         acquiredDate:  data.acquiredDate ? new Date(data.acquiredDate) : null,
         acquiredPrice: data.acquiredPrice ?? null,
         acquiredSource: data.acquiredSource || null,
+        isPublic:      data.isPublic !== false, // defaults to true
       },
     });
 
@@ -181,6 +183,47 @@ export async function getCardCollectionCountAction(cardId: string) {
   const session = await auth();
   if (!session?.user?.id) return 0;
   return db.cardCollection.count({ where: { cardId } });
+}
+
+// Returns collections the user owns that this card is NOT already in
+export async function getAvailableCollectionsAction(cardId: string) {
+  const session = await auth();
+  if (!session?.user?.id) return [];
+
+  const alreadyIn = await db.cardCollection.findMany({
+    where:  { cardId },
+    select: { collectionId: true },
+  });
+  const alreadyInIds = alreadyIn.map(r => r.collectionId);
+
+  return db.collection.findMany({
+    where:   { ownerId: session.user.id, id: { notIn: alreadyInIds } },
+    orderBy: { name: "asc" },
+    select:  { id: true, name: true },
+  });
+}
+
+// Adds a card to an additional collection
+export async function addToCollectionAction(cardId: string, collectionId: string) {
+  const userId = await requireAuth();
+
+  const [card, collection] = await Promise.all([
+    db.card.findUnique({ where: { id: cardId },       select: { ownerId: true } }),
+    db.collection.findUnique({ where: { id: collectionId }, select: { ownerId: true } }),
+  ]);
+  if (!card || card.ownerId !== userId)           return { error: "Card not found." };
+  if (!collection || collection.ownerId !== userId) return { error: "Collection not found." };
+
+  await db.cardCollection.upsert({
+    where:  { cardId_collectionId: { cardId, collectionId } },
+    update: {},
+    create: { cardId, collectionId },
+  });
+
+  void recordSnapshot(collectionId);
+  revalidatePath(`/dashboard/cards/${cardId}`);
+  revalidatePath(`/dashboard/collections/${collectionId}`);
+  return { success: true };
 }
 
 export async function deleteCardAction(cardId: string) {

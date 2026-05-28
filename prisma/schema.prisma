@@ -16,6 +16,7 @@ enum PlanTier {
   TRIAL
   MONTHLY
   ANNUAL
+  GIFTED   // admin-granted complimentary membership, no billing
 }
 
 enum CardStatus {
@@ -106,7 +107,21 @@ model User {
   profilePhoto     String?
   bio              String?
   location         String?
+  fullName         String?   // legal / real name used on packing slips and returns
+  phone            String?
+  addressLine1     String?
+  addressLine2     String?
+  city             String?
+  state            String?
+  zip              String?
+  country          String?
   isPublic         Boolean   @default(false)
+  isAdmin          Boolean   @default(false)
+  isFeatured       Boolean   @default(false)  // admin-featured collector — shown on Explore page
+  featuredAt       DateTime?
+  suspended        Boolean   @default(false)
+  suspendedAt      DateTime?
+  suspendedReason  String?
   trainingConsent  Boolean   @default(false)  // user consents to scan images being used for model training
 
   createdAt        DateTime  @default(now())
@@ -117,6 +132,17 @@ model User {
   cards            Card[]
   collections      Collection[]
   passwordResets   PasswordResetToken[]
+  comments         Comment[]
+  following        UserFollow[]       @relation("UserFollows")
+  followers        UserFollow[]       @relation("UserFollowedBy")
+  collectionFollows  CollectionFollow[]
+  cardWatches        CardWatch[]
+  consignmentOrders  ConsignmentOrder[]
+  feedPosts          FeedPost[]
+  exchangeListings   ExchangeListing[]  @relation("ExchangeListings")
+  initiatedTrades    Trade[]            @relation("InitiatedTrades")
+  receivedTrades     Trade[]            @relation("ReceivedTrades")
+  tradeRevisions     TradeRevision[]    @relation("ProposedRevisions")
 
   @@map("users")
 }
@@ -137,6 +163,8 @@ model Collection {
 
   cards       CardCollection[]
   snapshots   CollectionSnapshot[]
+  comments    Comment[]
+  followers   CollectionFollow[]
 
   @@index([ownerId])
   @@unique([ownerId, slug])
@@ -304,14 +332,740 @@ model Card {
   bgsSubSurface   Decimal? @db.Decimal(4, 1)
 
   isFeatured     Boolean    @default(false)  // admin-curated showcase on landing page
+  isTradeable    Boolean    @default(false)  // owner has marked this card as available for trade
   status         CardStatus @default(TRACKING)
-  isPublic       Boolean    @default(false)
+  isPublic       Boolean    @default(true)
 
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  collections    CardCollection[]
+  collections       CardCollection[]
+  comments          Comment[]
+  watchers          CardWatch[]
+  consignmentItems  ConsignmentItem[]
+  feedPosts         FeedPost[]
+  tradeCards        TradeRevisionCard[]
 
   @@index([ownerId])
+  @@index([isTradeable])
   @@map("cards")
+}
+
+model Comment {
+  id           String      @id @default(cuid())
+  authorId     String
+  author       User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body         String      @db.Text
+
+  cardId       String?
+  card         Card?       @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  collectionId String?
+  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  feedPostId   String?
+  feedPost     FeedPost?   @relation(fields: [feedPostId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime    @default(now())
+
+  @@index([cardId])
+  @@index([collectionId])
+  @@index([feedPostId])
+  @@map("comments")
+}
+
+model UserFollow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower    User @relation("UserFollows",    fields: [followerId],  references: [id], onDelete: Cascade)
+  following   User @relation("UserFollowedBy", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId])
+  @@map("user_follows")
+}
+
+model CollectionFollow {
+  userId       String
+  collectionId String
+  createdAt    DateTime @default(now())
+
+  user         User       @relation(fields: [userId],       references: [id], onDelete: Cascade)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, collectionId])
+  @@map("collection_follows")
+}
+
+model CardWatch {
+  userId       String
+  cardId       String
+  createdAt    DateTime  @default(now())
+  priceAtWatch Decimal?  @db.Decimal(10, 2)  // card's estimated value when first added to watchlist
+
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card         Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@id([userId, cardId])
+  @@map("card_watches")
+}
+
+// Admin: per-service credential storage (replaces hard-coded env vars for UI-editable keys)
+model SiteCredential {
+  id        String   @id @default(cuid())
+  service   String   @unique  // e.g. "psa_api_key", "resend_api_key"
+  label     String            // human-readable name shown in admin UI
+  value     String   @db.Text
+  group     String?           // display group / category (null = predefined group handles it)
+  updatedAt DateTime @updatedAt
+
+  @@map("site_credentials")
+}
+
+// Registered site links/buttons — label, URL, and enabled toggle for every link on the site
+model SiteLink {
+  id      String  @id @default(cuid())
+  key     String  @unique  // e.g. "nav_signup"
+  section String           // e.g. "Navigation"
+  label   String           // display text
+  href    String           // destination URL
+  enabled Boolean @default(true)
+  order   Int     @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@index([section])
+  @@map("site_links")
+}
+
+// Registered site pages — used as options when setting CTA button URLs
+model SitePage {
+  id        String   @id @default(cuid())
+  path      String   @unique  // e.g. "/signup"
+  label     String            // e.g. "Sign Up"
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([order])
+  @@map("site_pages")
+}
+
+// Admin: CMS slot storage for landing page and other editable copy
+model SiteSetting {
+  key       String   @id  // e.g. "hero_headline"
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("site_settings")
+}
+
+// ─────────────────────────────────────────
+// Consignment system
+// ─────────────────────────────────────────
+
+model ConsignmentOrder {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Status: pending → received → in_progress → completed | cancelled
+  status      String   @default("pending")
+  receiptCode String?  @unique  // admin assigns when marking received
+  receivedAt  DateTime?
+  adminNotes  String?
+
+  // Return address snapshot (copied from user profile at submission time)
+  returnName        String?
+  returnPhone       String?
+  returnAddressLine1 String?
+  returnAddressLine2 String?
+  returnCity        String?
+  returnState       String?
+  returnZip         String?
+  returnCountry     String?
+
+  submittedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       ConsignmentItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("consignment_orders")
+}
+
+model ConsignmentItem {
+  id      String           @id @default(cuid())
+  orderId String
+  order   ConsignmentOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Optional link to card already in the user's collection
+  cardId  String?
+  card    Card?            @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  // Card identity
+  player       String
+  year         Int?
+  cardNumber   String?
+  manufacturer String?
+  set          String?
+  subset       String?
+  sport        String?
+
+  // Grading
+  graded       Boolean  @default(false)
+  grade        String?
+  gradeCompany String?
+  certNumber   String?
+
+  // Special attributes
+  numbered     Boolean  @default(false)
+  serialNumber String?
+  autographed  Boolean  @default(false)
+
+  // Condition — always required, user-reported
+  condition    String?
+  notes        String?
+
+  // Extended card identity (eBay item specifics)
+  team         String?
+  league       String?
+  season       String?   // e.g. "1986" or "2023-24"
+  parallel     String?   // eBay "Parallel/Variety"
+  features     String[]  // e.g. ["Rookie Card", "Refractor", "Insert"]
+  cardName     String?
+  cardType     String?   // e.g. "Sports Trading Card"
+  cardSize     String?   // e.g. "Standard", "Mini"
+  countryOfOrigin String? @default("United States")
+  upc          String?
+
+  // Autograph details (when autographed = true)
+  signedBy                String?
+  autographAuthentication String?
+  autographAuthNumber     String?
+  autographFormat         String?
+
+  // Pricing
+  askingPrice    Decimal? @db.Decimal(10, 2)
+  estimatedValue Decimal? @db.Decimal(10, 2)
+
+  // Photos copied from the collection card at submission time
+  photos  String[]
+
+  // User's listing preferences
+  listingType  String?   // "auction" | "buyitnow"
+  desiredPrice Decimal? @db.Decimal(10, 2)
+  allowOffers  Boolean  @default(false)
+  minimumOffer Decimal? @db.Decimal(10, 2)
+  freeShipping Boolean  @default(false)
+
+  // Status: pending → received → listed → sold → paid | returned
+  status  String @default("pending")
+
+  listing EbayListing?
+
+  @@index([orderId])
+  @@map("consignment_items")
+}
+
+model EbayListing {
+  id                String          @id @default(cuid())
+  consignmentItemId String          @unique
+  item              ConsignmentItem @relation(fields: [consignmentItemId], references: [id], onDelete: Cascade)
+
+  title         String
+  subtitle      String?
+  description   String   @db.Text
+  startPrice    Decimal  @db.Decimal(10, 2)
+  buyItNowPrice Decimal? @db.Decimal(10, 2)
+
+  // eBay data (filled in after listing or via API)
+  ebayListingId String?
+  url           String?
+
+  // eBay item specifics — editable by admin in listing form
+  condition       String?
+  team            String?
+  league          String?
+  season          String?
+  parallel        String?
+  features        String[]
+  cardName        String?
+  cardType        String?
+  cardSize        String?
+  countryOfOrigin String?
+  upc             String?
+  signedBy                String?
+  autographAuthentication String?
+  autographAuthNumber     String?
+  autographFormat         String?
+  allowOffers     Boolean  @default(false)
+  minimumOffer    Decimal? @db.Decimal(10, 2)
+  autoAcceptOffer Decimal? @db.Decimal(10, 2)
+  freeShipping    Boolean  @default(false)
+  auctionDuration Int?     @default(7)
+  categoryId      String?  @default("261328")
+
+  // Editable card identity overrides (admin can correct errors from consignment form)
+  playerOverride       String?
+  yearOverride         Int?
+  manufacturerOverride String?
+  setOverride          String?
+  cardNumberOverride   String?
+
+  // Listing type override (admin can change from what user selected)
+  listingType        String?  @default("auction")  // "auction" | "buyitnow"
+
+  // Autograph override (admin can enable/disable regardless of consignment form)
+  autographedEbay    Boolean?
+  reservePrice       Decimal? @db.Decimal(10, 2)
+  material           String?  @default("Card Stock")
+  scheduledTime      DateTime?
+  privateListing     Boolean  @default(false)
+  shippingMethod     String?  @default("Standard shipping: Small to medium items")
+  shippingCostType       String?  @default("Calculated: Cost varies based on buyer location")
+  flatRateShipping       Decimal? @db.Decimal(10, 2)
+  excludedLocations      String[]
+  combinedShippingRule   String?  @default("")
+  weightLbs          Int?     @default(0)
+  weightOz           Decimal? @db.Decimal(5,1) @default(3)
+  dimLength          Decimal? @db.Decimal(5,1) @default(11.0)
+  dimWidth           Decimal? @db.Decimal(5,1) @default(6.0)
+  dimHeight          Decimal? @db.Decimal(5,1) @default(1.0)
+
+  // Condition widget fields
+  conditionType      String?           // "graded" | "ungraded"
+  gradeCompanyEbay   String?           // full eBay grader display name
+  gradeEbay          String?           // grade override (auto-filled from consignment)
+  certNumberEbay     String?           // cert number override
+  cardCondition      String?           // ungraded condition label
+
+  // Sport override (admin can correct a wrong sport set by the user)
+  sport              String?
+
+  // Extended eBay item specifics
+  vintage            Boolean @default(false)
+  eventTournament    String?
+  language           String? @default("English")
+  originalOrLicensed String? @default("Original")
+  californiaProp65   String?
+  cardThickness      String? @default("35 pt.")
+  customized         Boolean @default(false)
+  insertSet          String?
+  printRun           String?
+  customSpecifics    Json?   // [{ name: string, value: string }]
+
+  // Last eBay API error (cleared on success)
+  lastError String?  @db.Text
+
+  // Status: draft → active → sold → paid → shipped | ended
+  status    String   @default("draft")
+  listedAt  DateTime?
+  soldAt    DateTime?
+  soldPrice Decimal? @db.Decimal(10, 2)
+
+  // Fulfillment (set once payment is received / label is purchased)
+  ebayOrderId       String?
+  paidAt            DateTime?
+  buyerName         String?
+  buyerAddress      Json?     // { street1, street2?, city, state, postalCode, country }
+  shippingLabelUrl  String?   @db.Text
+  trackingNumber    String?
+  shippedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ebay_listings")
+}
+
+// ─────────────────────────────────────────
+// The Exchange — marketplace listings
+// ─────────────────────────────────────────
+
+model ExchangeListing {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Source — indicates where this listing came from
+  collectionCardId  String?   // user's own card from their collection
+  consignmentItemId String?   // consigned card auto-dual-listed when eBay goes live
+
+  // Seller (null = admin-managed consignment)
+  sellerId  String?
+  seller    User?   @relation("ExchangeListings", fields: [sellerId], references: [id])
+
+  // Card details (denormalized for fast browsing & search)
+  title        String
+  description  String?  @db.Text
+  photos       String[]
+  player       String
+  year         Int?
+  manufacturer String?
+  set          String?
+  grade        String?
+  gradeCompany String?
+  condition    String?
+  sport        String?
+  graded       Boolean  @default(false)
+
+  // Pricing & commission (rate captured at time of listing)
+  price          Decimal @db.Decimal(10, 2)
+  commissionRate Decimal @db.Decimal(5, 2)
+
+  // Status: active | sold | ended | draft
+  status    String    @default("active")
+  listedAt  DateTime? @default(now())
+  soldAt    DateTime?
+  soldPrice Decimal?  @db.Decimal(10, 2)
+
+  // eBay cross-reference for consignment dual-listed items
+  ebayListingId String?
+  ebayUrl       String?
+
+  @@index([status])
+  @@index([player])
+  @@index([sport])
+  @@map("exchange_listings")
+}
+
+// ─────────────────────────────────────────
+// Internal (non-consignment) listings
+// ─────────────────────────────────────────
+
+model InternalListing {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Card identity
+  player       String
+  year         Int?
+  manufacturer String?
+  set          String?
+  subset       String?
+  cardNumber   String?
+  sport        String?
+  team         String?
+  league       String?
+  season       String?
+  parallel     String?
+  features     String[]
+  graded       Boolean  @default(false)
+  grade        String?
+  gradeCompany String?
+  certNumber   String?
+  numbered     Boolean  @default(false)
+  serialNumber String?
+  autographed  Boolean  @default(false)
+  signedBy     String?
+  autographAuthentication String?
+  autographAuthNumber     String?
+  autographFormat         String?
+  condition    String?
+  photos       String[]
+  notes        String?
+  purchasePrice Decimal? @db.Decimal(10, 2)
+
+  // eBay listing config
+  title              String   @default("")
+  subtitle           String?
+  description        String   @default("") @db.Text
+  startPrice         Decimal  @default(0)    @db.Decimal(10, 2)
+  buyItNowPrice      Decimal?               @db.Decimal(10, 2)
+  reservePrice       Decimal?               @db.Decimal(10, 2)
+  listingType        String   @default("auction")
+  auctionDuration    Int      @default(7)
+  categoryId         String   @default("261328")
+  freeShipping       Boolean  @default(true)
+  allowOffers        Boolean  @default(false)
+  minimumOffer       Decimal?               @db.Decimal(10, 2)
+  autoAcceptOffer    Decimal?               @db.Decimal(10, 2)
+  flatRateShipping   Decimal?               @db.Decimal(10, 2)
+  shippingMethod     String   @default("Standard shipping: Small to medium items")
+  shippingCostType   String   @default("Calculated: Cost varies based on buyer location")
+  excludedLocations  String[]
+  combinedShippingRule String  @default("")
+  weightLbs          Int      @default(0)
+  weightOz           Decimal  @default(3)    @db.Decimal(5, 1)
+  dimLength          Decimal  @default(11.0) @db.Decimal(5, 1)
+  dimWidth           Decimal  @default(6.0)  @db.Decimal(5, 1)
+  dimHeight          Decimal  @default(1.0)  @db.Decimal(5, 1)
+  privateListing     Boolean  @default(false)
+  scheduledTime      DateTime?
+  material           String   @default("Card Stock")
+  conditionType      String?
+  gradeCompanyEbay   String?
+  gradeEbay          String?
+  certNumberEbay     String?
+  cardCondition      String?
+  cardName           String?
+  cardType           String?
+  cardSize           String?
+  countryOfOrigin    String?
+  upc                String?
+  vintage            Boolean  @default(false)
+  customized         Boolean  @default(false)
+  language           String   @default("English")
+  originalOrLicensed String   @default("Original")
+  californiaProp65   String?
+  cardThickness      String   @default("35 pt.")
+  insertSet          String?
+  printRun           String?
+  autographedEbay    Boolean?
+  customSpecifics    Json?
+  eventTournament    String?
+
+  // Status & eBay
+  // Status flow: draft → active → sold → paid → shipped | ended | scheduled
+  status        String   @default("draft")
+  ebayListingId String?
+  url           String?
+  listedAt      DateTime?
+  soldAt        DateTime?
+  soldPrice     Decimal?  @db.Decimal(10, 2)
+  lastError     String?   @db.Text
+
+  // Fulfillment (set once payment is received / label is purchased)
+  ebayOrderId       String?
+  paidAt            DateTime?
+  buyerName         String?
+  buyerAddress      Json?     // { street1, street2?, city, state, postalCode, country }
+  shippingLabelUrl  String?   @db.Text
+  trackingNumber    String?
+  shippedAt         DateTime?
+
+  @@map("internal_listings")
+}
+
+// ─────────────────────────────────────────
+// Activity logging
+// ─────────────────────────────────────────
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  level      String   // "info" | "warn" | "error"
+  category   String   // "system" | "user" | "activity" | "ebay" | "auth" | "admin"
+  action     String   // dot-notation e.g. "ebay.listing.failed"
+  message    String   @db.Text
+  data       Json?    // extra context (request body, error details, etc.)
+  userId     String?  // actor (null for system events)
+  targetId   String?  // affected resource id (orderId, listingId, cardId…)
+  targetType String?  // "order" | "listing" | "card" | "user" | …
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([category, createdAt(sort: Desc)])
+  @@index([level,    createdAt(sort: Desc)])
+  @@index([userId,   createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("activity_logs")
+}
+
+// ─────────────────────────────────────────
+// Articles / News
+// ─────────────────────────────────────────
+
+model Article {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  excerpt     String?   @db.Text
+  content     String    @db.Text
+  coverImage  String?
+  category    String?   // e.g. "Market News", "How To", "Community"
+  status      String    @default("draft")   // "draft" | "published"
+  source      String    @default("manual")  // "manual" | "api"
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, publishedAt])
+  @@map("articles")
+}
+
+// ─────────────────────────────────────────
+// Page widget layout
+// ─────────────────────────────────────────
+
+model PageLayout {
+  id        String  @id @default(cuid())
+  page      String  // e.g. "dashboard" | "explore"
+  widgetKey String  // key from WIDGET_REGISTRY in lib/layout.ts
+  order     Int     @default(0)
+  enabled   Boolean @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@unique([page, widgetKey])
+  @@index([page, order])
+  @@map("page_layouts")
+}
+
+// Social feed — a user's public activity stream
+model FeedPost {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  cardId    String?
+  card      Card?    @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  caption   String?  @db.Text
+  photos    String[]
+  comments  Comment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([cardId])
+  @@map("feed_posts")
+}
+
+// ─────────────────────────────────────────
+// Photo straightener training samples
+// ─────────────────────────────────────────
+
+model PhotoTrainingSample {
+  id          String   @id @default(cuid())
+  // Visual before/after pair — Claude sees both so it learns the transformation
+  beforeThumb String   @db.Text   // 400px JPEG data URL — original uncropped photo
+  afterThumb  String   @db.Text   // 400px JPEG data URL — correctly cropped result
+  // Rough card center in the before image (fractions 0-1) — used in Pass 1
+  cx          Float
+  cy          Float
+  // Taxonomy matches the C:\cardtraining folder structure
+  category    String              // e.g. "graded_psa" | "raw_bare" | "raw_toploader"
+  description String   @db.Text  // subfolder name, e.g. "dark_table_close_up"
+  // Track source so re-scanning skips already-imported pairs
+  sourcePath  String   @unique    // e.g. "graded_psa/dark_table_close_up"
+  createdAt   DateTime @default(now())
+
+  @@index([category, createdAt])
+  @@map("photo_training_samples")
+}
+
+model EbaySentReply {
+  id              String   @id @default(cuid())
+  parentMessageId String              // buyer's MessageID this is replying to
+  itemId          String?
+  to              String              // buyer username
+  subject         String
+  body            String   @db.Text
+  sentAt          DateTime @default(now())
+
+  @@index([sentAt])
+  @@map("ebay_sent_replies")
+}
+
+model EbayFeedbackAlert {
+  id             String    @id @default(cuid())
+  feedbackId     String    @unique          // eBay FeedbackID — prevents duplicate alerts
+  commentType    String                     // "Negative" | "Neutral"
+  commentingUser String
+  commentText    String    @db.Text
+  commentTime    DateTime
+  itemId         String?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([resolvedAt])
+  @@map("ebay_feedback_alerts")
+}
+
+// ─────────────────────────────────────────
+// Trading — peer-to-peer card trading with Card Cloud as escrow
+// ─────────────────────────────────────────
+// Status flow:
+//   proposed       → user B sent a proposal to user A
+//   counter        → either side has issued a counter-offer; latest revision is "on the table"
+//   accepted       → both sides agreed on the current revision; cards locked, parties pack
+//   inbound        → at least one party has shipped their cards to Card Cloud
+//   received_both  → Card Cloud has both shipments in hand; ready to ship out
+//   outbound       → Card Cloud has shipped cards to both parties
+//   complete       → both parties have confirmed they received their new cards
+//   declined       → one side rejected without a counter; trade dead
+//   cancelled      → initiator pulled the proposal back, or admin killed it
+//   disputed       → a receiver flagged a problem; needs admin review
+
+model Trade {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Parties
+  initiatorId String
+  initiator   User     @relation("InitiatedTrades", fields: [initiatorId], references: [id])
+  targetId    String
+  target      User     @relation("ReceivedTrades", fields: [targetId], references: [id])
+
+  status      String   @default("proposed")
+
+  // The latest "currently on the table" revision — what either side would accept
+  currentRevisionId String? @unique
+
+  // Inbound: traders shipping to Card Cloud
+  initiatorInboundTracking   String?
+  initiatorInboundReceivedAt DateTime?
+  targetInboundTracking      String?
+  targetInboundReceivedAt    DateTime?
+
+  // Outbound: Card Cloud shipping to traders
+  initiatorOutboundLabelUrl  String? @db.Text
+  initiatorOutboundTracking  String?
+  initiatorOutboundShippedAt DateTime?
+  initiatorReceivedAt        DateTime?    // initiator confirmed receipt
+  targetOutboundLabelUrl     String? @db.Text
+  targetOutboundTracking     String?
+  targetOutboundShippedAt    DateTime?
+  targetReceivedAt           DateTime?    // target confirmed receipt
+
+  // Dispute
+  disputeOpenedById String?
+  disputeReason     String?  @db.Text
+  disputeOpenedAt   DateTime?
+
+  revisions TradeRevision[] @relation("TradeRevisions")
+
+  @@index([initiatorId])
+  @@index([targetId])
+  @@index([status])
+  @@map("trades")
+}
+
+// Each round of offer/counter-offer is a revision. The latest one is the "current"
+// proposal that either party can accept.
+model TradeRevision {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+
+  tradeId     String
+  trade       Trade    @relation("TradeRevisions", fields: [tradeId], references: [id], onDelete: Cascade)
+
+  proposedById String
+  proposedBy   User    @relation("ProposedRevisions", fields: [proposedById], references: [id])
+  message     String?  @db.Text
+
+  cards       TradeRevisionCard[]
+
+  @@index([tradeId])
+  @@map("trade_revisions")
+}
+
+model TradeRevisionCard {
+  revisionId String
+  revision   TradeRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  cardId     String
+  card       Card          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  // Which side this card belongs to in the trade: "initiator" or "target".
+  // (Initiator = user who sent the original proposal; target = user whose card was requested.)
+  side       String
+
+  @@id([revisionId, cardId])
+  @@index([cardId])
+  @@map("trade_revision_cards")
 }

@@ -1,6 +1,6 @@
 const { spawn } = require("child_process");
 
-const child = spawn("npm", ["run", "dev:app"], { stdio: "inherit", shell: true });
+const child = spawn("npm", ["run", "dev:app"], { stdio: "inherit", shell: true, windowsHide: true });
 
 process.on("SIGINT",  () => child.kill("SIGINT"));
 process.on("SIGTERM", () => child.kill("SIGTERM"));

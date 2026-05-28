@@ -1211,3 +1211,69 @@ Files changed:
 - Updated MEMORY.md index
 
 ---
+
+---
+
+## 2026-05-28 — Production deployment prep: Cloudflare R2, Railway start command, DEPLOY.md runbook
+
+**Goal:** wire the app for first production deploy on Railway with hosted Postgres + Cloudflare R2 photo storage. No code changes required to switch between local dev and prod — env vars decide.
+
+**Cloudflare R2 client (`lib/r2.ts`, new):**
+- S3-compatible PutObjectCommand wrapper using `@aws-sdk/client-s3`.
+- Endpoint `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`, region `auto`.
+- `r2Configured()` returns true only when all 5 env vars are present (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`).
+- `uploadToR2({key, body, contentType})` returns the public URL the browser can load.
+- Cached `S3Client` (one per process).
+
+**Upload route now switches on env (`app/api/upload/route.ts`):**
+- If R2 is configured: stream the buffer to R2, return `{ url: "<R2_PUBLIC_URL>/uploads/<hash>.jpg" }`.
+- Otherwise: keep writing to `./public/uploads/` on the local filesystem (local dev unchanged).
+- The form code that calls this endpoint never has to know which path was used — response shape is identical.
+
+**Prisma migration history bootstrapped:**
+- Generated `prisma/migrations/20260528120000_init/migration.sql` via `npx prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script` — 36 CREATE TABLE statements, ~34 KB.
+- Added `prisma/migrations/migration_lock.toml` with `provider = "postgresql"`.
+- Marked the initial migration as already-applied against the local PGlite DB via `prisma migrate resolve --applied 20260528120000_init` (so local dev keeps using existing tables without trying to re-create them).
+- Production: `prisma migrate deploy` runs on every Railway start (see below) and creates the schema from scratch on first deploy.
+
+**Railway start command (`package.json`):**
+- Added `postinstall: "prisma generate"` so Prisma Client builds against the production Postgres on every Railway install.
+- Added `start:prod: "npx prisma migrate deploy && next start"` — runs pending migrations, then boots Next.js. Railway sets `$PORT` which `next start` respects natively.
+
+**`railway.json` (new):**
+- Builder: NIXPACKS (Railway auto-detects Next.js).
+- Start command: `npm run start:prod`.
+- Healthcheck: `GET /api/health` with 60 s timeout.
+- Restart policy: ON_FAILURE, max 3 retries.
+
+**Healthcheck route (`app/api/health/route.ts`, new):**
+- `GET /api/health` runs `SELECT 1` through Prisma. Returns `{ ok: true }` on success, 503 with the error message on failure. Force-dynamic so it's not cached.
+
+**`.env.example` rewritten:**
+- Documents every env var actually referenced in the code (greped `process.env.*` across the repo). New sections for `NEXT_PUBLIC_BASE_URL` / `NEXT_PUBLIC_APP_URL`, `ADMIN_EMAIL`, Cloudflare R2 (5 vars + a commented `CLOUDFLARE_R2_*` set used by `lib/training.ts`), eBay marketplace deletion endpoint, `EMAIL_WEBHOOK_SECRET`, `RECEIVE_TOKEN_SECRET`, `AI_LAB_URL`, `OLLAMA_URL`, `SUPPORT_FROM`.
+- Switched the default email preset to SMTP (matches Mike's preference) — Resend is commented as a fallback.
+
+**`DEPLOY.md` runbook (new):**
+- Step-by-step browser walkthrough for: Cloudflare R2 bucket + API token, Railway project + Postgres add-on + env vars paste-in, Google OAuth allowlist update for the Railway URL.
+- "How a deploy works" section explaining the postinstall -> build -> migrate -> start sequence.
+- Smoke test checklist (landing, /api/health, Google sign-in, photo upload pointing at R2).
+- Custom-domain cutover section saved for after the Railway URL is healthy — DNS-later approach so we don't disrupt the currently-live GoDaddy site.
+- Rollback guidance: redeploy a known-good Railway build; never `migrate reset` against prod, always roll forward with a new migration.
+
+**Why R2 vs S3:** R2 has free egress, S3-compatible API, integrates cleanly with Cloudflare's CDN/custom domain. Cheaper at scale. Mike's preference: build for many users from day one rather than swap to a bigger solution later.
+
+**Why Railway vs Vercel:** persistent runtime (Vercel serverless cold-starts hurt with Prisma + heavy initial bundle), one-click Postgres, predictable pricing. Vendor-swappable — nothing in the code is Railway-specific.
+
+**Files changed:**
+- `lib/r2.ts` (new)
+- `app/api/upload/route.ts`
+- `app/api/health/route.ts` (new)
+- `prisma/migrations/20260528120000_init/migration.sql` (new)
+- `prisma/migrations/migration_lock.toml` (new)
+- `package.json`
+- `railway.json` (new)
+- `.env.example`
+- `DEPLOY.md` (new)
+- `package-lock.json` (+ `@aws-sdk/client-s3` added)
+
+**Still to do:** Mike walks through Railway signup + R2 bucket creation, pastes env vars, first deploy, smoke test. Custom domain cutover happens later.

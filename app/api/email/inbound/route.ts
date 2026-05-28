@@ -33,14 +33,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Normalise across providers — Resend inbound format
+  // Normalise across providers — handles both IMAP poller format and Resend webhook format
   const email = {
-    fromEmail: String(payload.from ?? payload.sender ?? ""),
-    fromName:  String(payload.from_name ?? payload.senderName ?? ""),
-    subject:   String(payload.subject ?? "No subject"),
-    body:      String(payload.text ?? payload.plain_text ?? payload.html ?? ""),
-    messageId: String(payload.message_id ?? payload.id ?? ""),
-    inReplyTo: String(payload.in_reply_to ?? ""),
+    fromEmail: String(payload.fromEmail ?? payload.from ?? payload.sender ?? ""),
+    fromName:  String(payload.fromName  ?? payload.from_name ?? payload.senderName ?? ""),
+    subject:   String(payload.subject   ?? "No subject"),
+    body:      String(payload.body      ?? payload.text ?? payload.plain_text ?? payload.html ?? ""),
+    messageId: String(payload.messageId ?? payload.message_id ?? payload.id ?? ""),
+    inReplyTo: String(payload.inReplyTo ?? payload.in_reply_to ?? ""),
   };
 
   if (!email.fromEmail) {

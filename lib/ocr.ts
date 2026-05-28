@@ -92,6 +92,7 @@ async function runOCR(imageBuffer: Buffer): Promise<string> {
     const child = spawn(pythonExe(), [workerPath], {
       cwd:   root,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     let stdout = "";

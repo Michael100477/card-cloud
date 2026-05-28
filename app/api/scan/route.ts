@@ -30,43 +30,60 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  // ── Path 1: Tesseract OCR (free, try first) ───────────────────────────────
-  let ocrData: { detection: ReturnType<typeof extractCertNumber>; label: ReturnType<typeof parseLabelData> } | null = null;
-
+  // ── Path 1: Claude Vision (primary) ──────────────────────────────────────
+  let visionLabel: Awaited<ReturnType<typeof readLabelWithVision>> | null = null;
   try {
-    const rawText = await Promise.race([
-      extractText(buffer),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("OCR_TIMEOUT")), OCR_TIMEOUT_MS)
-      ),
-    ]);
-
-    const detection = extractCertNumber(rawText);
-    const label     = parseLabelData(rawText);
-
-    // Accept OCR result if it found a cert number OR a year
-    // (PaddleOCR is accurate enough that partial results are still useful)
-    if (detection || label.year) {
-      ocrData = { detection, label };
-    }
+    visionLabel = await readLabelWithVision(buffer);
   } catch {
-    // OCR timed out or failed
+    // Vision failed — fall back to OCR
   }
 
-  // ── Path 2: Claude Vision — DISABLED while testing PaddleOCR ────────────
-  // To re-enable: uncomment this block and remove the early return above.
-  // Vision fallback is in lib/vision.ts, ready to restore when needed.
+  // ── Path 2: PaddleOCR (fallback if Vision fails or returns nothing) ───────
+  let ocrData: { detection: ReturnType<typeof extractCertNumber>; label: ReturnType<typeof parseLabelData> } | null = null;
+
+  if (!visionLabel?.certNumber && !visionLabel?.player) {
+    try {
+      const rawText = await Promise.race([
+        extractText(buffer),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("OCR_TIMEOUT")), OCR_TIMEOUT_MS)
+        ),
+      ]);
+      const detection = extractCertNumber(rawText);
+      const label     = parseLabelData(rawText);
+      if (detection || label.year) ocrData = { detection, label };
+    } catch {
+      // OCR also failed
+    }
+  }
 
   // ── No usable data from either path ──────────────────────────────────────
-  if (!ocrData) {
+  if (!visionLabel?.certNumber && !visionLabel?.player && !ocrData) {
     return NextResponse.json({
       success: false,
       error:   "Could not read the label. Try a closer photo or enter the cert number manually.",
     });
   }
 
-  // ── OCR succeeded — build response ────────────────────────────────────────
-  const { detection, label } = ocrData;
+  // ── Merge Vision + OCR results (Vision wins where it has data) ────────────
+  const detection = visionLabel
+    ? { certNumber: visionLabel.certNumber ?? "", grader: (visionLabel.grader ?? "Unknown") as ReturnType<typeof extractCertNumber>["grader"] }
+    : ocrData?.detection ?? null;
+  const label = visionLabel
+    ? {
+        player:          visionLabel.player       ?? null,
+        year:            visionLabel.year          ?? null,
+        manufacturer:    visionLabel.manufacturer  ?? null,
+        set:             visionLabel.set           ?? null,
+        subset:          visionLabel.subset        ?? null,
+        cardNumber:      visionLabel.cardNumber    ?? null,
+        grade:           visionLabel.grade         ?? null,
+        bgsSubCentering: visionLabel.bgsSubCentering ?? null,
+        bgsSubCorners:   visionLabel.bgsSubCorners   ?? null,
+        bgsSubEdges:     visionLabel.bgsSubEdges     ?? null,
+        bgsSubSurface:   visionLabel.bgsSubSurface   ?? null,
+      }
+    : ocrData?.label ?? { player: null, year: null, manufacturer: null, set: null, subset: null, cardNumber: null, grade: null, bgsSubCentering: null, bgsSubCorners: null, bgsSubEdges: null, bgsSubSurface: null };
 
   let apiData = null;
   if (detection?.grader === "PSA") {
@@ -74,6 +91,8 @@ export async function POST(req: NextRequest) {
   }
 
   const cardData = {
+    isGraded:        visionLabel ? visionLabel.isGraded : !!(detection?.certNumber),
+    isAutographed:   visionLabel?.isAutographed ?? false,
     certNumber:      detection?.certNumber          ?? null,
     grader:          detection?.grader              ?? "Unknown",
     player:          apiData?.player   || label.player       || null,
@@ -83,7 +102,7 @@ export async function POST(req: NextRequest) {
     subset:          apiData?.subset   || label.subset       || null,
     cardNumber:      apiData?.cardNumber || label.cardNumber || null,
     grade:           apiData?.grade    || label.grade        || null,
-    sport:           apiData?.sport                         || null,
+    sport:           visionLabel?.sport || apiData?.sport    || null,
     bgsSubCentering: label.bgsSubCentering ?? null,
     bgsSubCorners:   label.bgsSubCorners   ?? null,
     bgsSubEdges:     label.bgsSubEdges     ?? null,
@@ -108,8 +127,10 @@ export async function POST(req: NextRequest) {
     success:    true,
     certNumber: cardData.certNumber,
     grader:     cardData.grader,
-    source:     apiData ? "api+ocr" : "ocr",
+    source:     apiData ? (visionLabel ? "api+vision" : "api+ocr") : (visionLabel ? "vision" : "ocr"),
     cardData: {
+      isGraded:        cardData.isGraded,
+      isAutographed:   cardData.isAutographed,
       certNumber:      cardData.certNumber,
       grader:          cardData.grader,
       player:          cardData.player,

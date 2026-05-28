@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createCardAction } from "@/lib/actions/cards";
 import { cn } from "@/lib/utils";
 import type { GraderCardData } from "@/lib/graders";
+import { gradeToCondition } from "@/lib/graders";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -34,17 +35,26 @@ const BLANK = {
 
 type Tab = "manual" | "scan" | "import";
 interface PhotoPreview { file: File; preview: string; }
-interface Props { collection: { id: string; name: string } | null; }
+interface Props {
+  collection:  { id: string; name: string } | null;
+  collections?: { id: string; name: string }[];
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function AddCardForm({ collection }: Props) {
+export function AddCardForm({ collection, collections = [] }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  // Collection picker — only used when no collection is pre-selected
+  const [pickedCollectionId, setPickedCollectionId] = useState(collections[0]?.id ?? "");
 
   // Form fields
   const [tab, setTab]   = useState<Tab>("manual");
   const [form, setForm] = useState({ ...BLANK });
+
+  // Visibility
+  const [isPublic, setIsPublic] = useState(true); // default public
 
   // Tags — preset toggles + free-text custom tags
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -135,6 +145,7 @@ export function AddCardForm({ collection }: Props) {
   }
 
   function validate() {
+    if (!collection?.id && !pickedCollectionId) return "Please select a collection for this card.";
     if (!form.player.trim())       return "Player / card name is required.";
     if (!form.year || isNaN(Number(form.year))) return "A valid year is required.";
     if (!form.manufacturer.trim()) return "Manufacturer is required.";
@@ -194,7 +205,8 @@ export function AddCardForm({ collection }: Props) {
         acquiredDate:   form.acquiredDate  || undefined,
         acquiredPrice:  form.acquiredPrice ? Number(form.acquiredPrice) : undefined,
         acquiredSource: form.acquiredSource || undefined,
-        collectionId:   collection?.id,
+        collectionId:   collection?.id ?? pickedCollectionId ?? undefined,
+        isPublic,
       });
 
       if (result?.error) { setError(result.error); return; }
@@ -225,9 +237,29 @@ export function AddCardForm({ collection }: Props) {
           {collection ? collection.name : "My Collections"}
         </Link>
         <h1 className="text-navy text-2xl font-bold">Add a card</h1>
-        {collection && (
+        {collection ? (
           <p className="text-slate-500 text-sm mt-0.5">
             Adding to <span className="font-medium text-navy">{collection.name}</span>
+          </p>
+        ) : collections.length > 0 ? (
+          <div className="flex items-center gap-2 mt-2">
+            <label className="text-slate-500 text-sm shrink-0">Collection:</label>
+            <select
+              value={pickedCollectionId}
+              onChange={e => setPickedCollectionId(e.target.value)}
+              className="border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 bg-white"
+            >
+              {collections.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="text-slate-500 text-sm mt-1.5">
+            Cards must belong to a collection.{" "}
+            <Link href="/dashboard/my-collections" className="text-brand hover:underline font-medium">
+              Create a collection first →
+            </Link>
           </p>
         )}
       </div>
@@ -275,6 +307,11 @@ export function AddCardForm({ collection }: Props) {
               setField("gradeCompany", data.grader);
             }
             setField("certNumber", data.certNumber);
+            // Auto-derive condition from grade + grader
+            if (data.grade && data.grader && data.grader !== "Unknown") {
+              const cond = gradeToCondition(data.grader, data.grade);
+              if (cond) setField("conditionNotes", cond);
+            }
             // BGS subgrades
             if (data.bgsSubCentering != null) setField("bgsSubCentering", String(data.bgsSubCentering));
             if (data.bgsSubCorners   != null) setField("bgsSubCorners",   String(data.bgsSubCorners));
@@ -593,6 +630,27 @@ export function AddCardForm({ collection }: Props) {
           </div>
 
           {/* ── Action buttons ──────────────────────────────────────────── */}
+          {/* Visibility toggle */}
+          <div className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
+            <div>
+              <p className="text-navy text-sm font-semibold">
+                {isPublic ? "🌐 Public" : "🔒 Private"}
+              </p>
+              <p className="text-slate-400 text-xs mt-0.5">
+                {isPublic
+                  ? "Visible to anyone — appears in your public feed and the community."
+                  : "Only you can see this card."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPublic(v => !v)}
+              className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${isPublic ? "bg-green-500" : "bg-slate-300"}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${isPublic ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
+          </div>
+
           <div className="flex gap-3 pt-2 pb-8">
             <Link
               href={collection ? `/dashboard/collections/${collection.id}` : "/dashboard"}
@@ -600,12 +658,12 @@ export function AddCardForm({ collection }: Props) {
             >
               Cancel
             </Link>
-            <button type="button" disabled={isPending} onClick={() => doSave(true)}
+            <button type="button" disabled={isPending || (!collection?.id && !pickedCollectionId)} onClick={() => doSave(true)}
               className="flex-1 sm:flex-none px-5 py-2.5 border border-brand text-brand text-sm font-semibold rounded-xl hover:bg-brand-muted transition-colors disabled:opacity-60"
             >
               {isPending ? "Saving…" : "Save & add another"}
             </button>
-            <button type="button" disabled={isPending} onClick={() => doSave(false)}
+            <button type="button" disabled={isPending || (!collection?.id && !pickedCollectionId)} onClick={() => doSave(false)}
               className="flex-1 sm:flex-none px-5 py-2.5 bg-amber text-amber-dark text-sm font-semibold rounded-xl hover:brightness-105 transition-all disabled:opacity-60"
             >
               {isPending ? "Saving…" : "Save card →"}

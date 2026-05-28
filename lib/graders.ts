@@ -6,6 +6,107 @@
 
 export type GraderName = "PSA" | "BGS" | "BGGS" | "BCCG" | "SGC" | "CGC" | "HGA" | "Unknown";
 
+// Maps a grading company + grade value to the human-readable condition label
+// that appears on the slab. Raw cards never call this — they use the condition dropdown.
+export function gradeToCondition(company: string, grade: string): string {
+  const g = grade.trim().toLowerCase();
+  if (!g) return "";
+
+  switch (company) {
+    case "PSA":
+      if (g === "10")  return "Gem Mint";
+      if (g === "9.5") return "Mint+";
+      if (g === "9")   return "Mint";
+      if (g === "8.5") return "NM-MT+";
+      if (g === "8")   return "NM-MT";
+      if (g === "7.5") return "NM+";
+      if (g === "7")   return "NM";
+      if (g === "6")   return "EX-MT";
+      if (g === "5")   return "EX";
+      if (g === "4")   return "VG-EX";
+      if (g === "3")   return "VG";
+      if (g === "2")   return "Good";
+      if (g === "1.5") return "Fair";
+      if (g === "1")   return "Poor";
+      break;
+    case "BGS":
+    case "BGGS":
+      if (g === "10 (black label)" || g === "10") return "Pristine";
+      if (g === "10 (pristine)")   return "Pristine";
+      if (g === "9.5")  return "Gem Mint";
+      if (g === "9")    return "Mint";
+      if (g === "8.5")  return "NM-MT+";
+      if (g === "8")    return "NM-MT";
+      if (g === "7.5")  return "NM+";
+      if (g === "7")    return "NM";
+      if (g === "6.5")  return "EX-MT+";
+      if (g === "6")    return "EX-MT";
+      break;
+    case "SGC":
+      if (g === "10")  return "Gem Mint";
+      if (g === "9.5") return "Mint+";
+      if (g === "9")   return "Mint";
+      if (g === "8.5") return "NM-MT+";
+      if (g === "8")   return "NM-MT";
+      if (g === "7.5") return "NM+";
+      if (g === "7")   return "NM";
+      if (g === "6")   return "EX-MT";
+      if (g === "5")   return "EX";
+      if (g === "4")   return "VG-EX";
+      if (g === "3")   return "VG";
+      if (g === "2")   return "Good";
+      if (g === "1")   return "Poor";
+      break;
+    case "CGC":
+      if (g === "10")  return "Pristine";
+      if (g === "9.5") return "Gem Mint";
+      if (g === "9")   return "Mint";
+      if (g === "8.5") return "NM-MT+";
+      if (g === "8")   return "NM-MT";
+      if (g === "7.5") return "NM+";
+      if (g === "7")   return "NM";
+      if (g === "6")   return "EX-MT";
+      if (g === "5")   return "EX";
+      break;
+    case "HGA":
+      if (g === "10" || g === "9.5") return "Gem Mint";
+      if (g === "9")   return "Mint";
+      if (g === "8.5") return "NM-MT+";
+      if (g === "8")   return "NM-MT";
+      if (g === "7.5") return "NM+";
+      if (g === "7")   return "NM";
+      break;
+    case "CSG":
+      if (g === "10")  return "Gem Mint";
+      if (g === "9.5") return "Mint+";
+      if (g === "9")   return "Mint";
+      if (g === "8.5") return "NM-MT+";
+      if (g === "8")   return "NM-MT";
+      if (g === "7")   return "NM";
+      if (g === "6")   return "EX-MT";
+      if (g === "5")   return "EX";
+      break;
+  }
+
+  // Numeric fallback for unknown graders
+  const num = parseFloat(g);
+  if (!isNaN(num)) {
+    if (num >= 9.5) return "Gem Mint";
+    if (num >= 9)   return "Mint";
+    if (num >= 8.5) return "NM-MT+";
+    if (num >= 8)   return "NM-MT";
+    if (num >= 7)   return "NM";
+    if (num >= 6)   return "EX-MT";
+    if (num >= 5)   return "EX";
+    if (num >= 4)   return "VG-EX";
+    if (num >= 3)   return "VG";
+    if (num >= 2)   return "Good";
+    return "Poor";
+  }
+
+  return grade;
+}
+
 export interface GraderCardData {
   certNumber:      string;
   grader:          GraderName;

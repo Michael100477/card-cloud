@@ -39,7 +39,7 @@ interface Listing {
   player: string; year: number | null; set: string | null;
   grade: string | null; gradeCompany: string | null; ownerName: string;
   currentBid: number | null; bidCount: number | null; watchCount: number | null;
-  endTime: string | null;
+  endTime: string | null; questionCount: number;
 }
 
 interface InternalListing {
@@ -51,15 +51,15 @@ interface InternalListing {
   player: string; year: number | null;
   set: string | null; grade: string | null; gradeCompany: string | null;
   currentBid: number | null; bidCount: number | null; watchCount: number | null;
-  endTime: string | null;
+  endTime: string | null; questionCount: number;
 }
 
 interface DirectListing {
   ebayItemId: string; title: string | null;
   startPrice: number; currentPrice: number; binPrice: number | null;
-  quantitySold: number; watchCount: number;
+  quantitySold: number; bidCount: number; watchCount: number;
   startTime: string | null; endTime: string | null;
-  url: string | null;
+  url: string | null; questionCount: number;
 }
 
 interface DirectDetail {
@@ -333,6 +333,9 @@ export function ListingsClient({
                       {l.status === "active" && (l.watchCount ?? 0) > 0 && (
                         <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
                       )}
+                      {l.questionCount > 0 && (
+                        <p className="text-amber-700 text-xs mt-0.5" title="Buyer questions in last 30 days">💬 {l.questionCount} question{l.questionCount === 1 ? "" : "s"}</p>
+                      )}
                     </td>
                     <td className="px-5 py-3">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[l.status] ?? "bg-slate-100 text-slate-500"}`}>{l.status}</span>
@@ -487,6 +490,9 @@ export function ListingsClient({
                         {l.status === "active" && (l.watchCount ?? 0) > 0 && (
                           <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
                         )}
+                        {l.questionCount > 0 && (
+                          <p className="text-amber-700 text-xs mt-0.5" title="Buyer questions in last 30 days">💬 {l.questionCount} question{l.questionCount === 1 ? "" : "s"}</p>
+                        )}
                       </td>
                       <td className="px-5 py-3">
                         {(() => {
@@ -585,11 +591,14 @@ export function ListingsClient({
                               </p>
                             </td>
                             <td className="px-5 py-3">
-                              <p className="text-navy font-medium text-xs">${usd(l.currentPrice)}</p>
+                              <p className="text-navy font-medium text-xs">${usd(l.currentPrice)}{l.bidCount > 0 && <span className="text-slate-500 font-normal"> ({l.bidCount} bid{l.bidCount === 1 ? "" : "s"})</span>}</p>
                               {l.binPrice !== null && <p className="text-slate-400 text-xs">BIN ${usd(l.binPrice)}</p>}
                               {l.quantitySold > 0 && <p className="text-green-600 text-xs">{l.quantitySold} sold</p>}
                               {l.watchCount > 0 && (
                                 <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
+                              )}
+                              {l.questionCount > 0 && (
+                                <p className="text-amber-700 text-xs mt-0.5" title="Buyer questions in last 30 days">💬 {l.questionCount} question{l.questionCount === 1 ? "" : "s"}</p>
                               )}
                             </td>
                             <td className="px-5 py-3 text-slate-400 text-xs">

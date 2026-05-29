@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin, AdminError } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
+import { getQuestionCounts } from "@/lib/ebay-question-counts";
 
 async function getCred(service: string): Promise<string | null> {
   const row = await db.siteCredential.findUnique({ where: { service }, select: { value: true } });
@@ -110,6 +111,9 @@ export async function GET() {
   const activeSection = text.match(/<ActiveList>([\s\S]*?)<\/ActiveList>/)?.[1] ?? "";
   const items = [...activeSection.matchAll(/<Item>([\s\S]*?)<\/Item>/g)].map(m => m[1]);
 
+  // Buyer-question counts (cached separately, doesn't block if it errors).
+  const questionCounts = await getQuestionCounts();
+
   const listings = items.map(block => {
     const itemId     = attr(block, "ItemID");
     const startPrice = parseFloat(attr(block, "StartPrice") ?? "0");
@@ -118,10 +122,12 @@ export async function GET() {
     const currentPrice = parseFloat(attr(block, "CurrentPrice") ?? String(startPrice));
     const quantitySold = parseInt(attr(block, "QuantitySold") ?? "0");
     const watchCount   = parseInt(attr(block, "WatchCount") ?? "0") || 0;
+    const bidCount     = parseInt(attr(block, "BidCount")   ?? "0") || 0;
     const timeLeftMs   = durationToMs(attr(block, "TimeLeft"));
     const endTime      = timeLeftMs != null && timeLeftMs > 0
       ? new Date(Date.now() + timeLeftMs).toISOString()
       : null;
+    const questionCount = itemId ? (questionCounts.get(itemId) ?? 0) : 0;
     return {
       ebayItemId:   itemId,
       title:        attr(block, "Title"),
@@ -129,7 +135,9 @@ export async function GET() {
       currentPrice,
       binPrice:     binPrice && !isNaN(binPrice) ? binPrice : null,
       quantitySold,
+      bidCount,
       watchCount,
+      questionCount,
       startTime:    attr(block, "StartTime"),
       endTime,
       url:          attr(block, "ViewItemURL"),

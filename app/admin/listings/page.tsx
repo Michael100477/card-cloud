@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { getLivePrices } from "@/lib/ebay-live-prices";
+import { getQuestionCounts } from "@/lib/ebay-question-counts";
 import { syncOrdersThrottled } from "@/lib/ebay-sync-cache";
 import { ListingsClient } from "./ListingsClient";
 
@@ -22,7 +23,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     // Pull sold/paid/shipped status from eBay's Fulfillment API (rate-limited to 1/min)
     syncOrdersThrottled(),
   ]);
-  const [listings, internalListings, livePrices] = await Promise.all([
+  const [listings, internalListings, livePrices, questionCounts] = await Promise.all([
     db.ebayListing.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -36,6 +37,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     }),
     db.internalListing.findMany({ orderBy: { createdAt: "desc" } }),
     getLivePrices(),
+    getQuestionCounts(),
   ]);
 
   // Hide imports the admin hasn't actually saved yet — they belong in the
@@ -65,10 +67,11 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     grade:        l.item.grade,
     gradeCompany: l.item.gradeCompany,
     ownerName:    l.item.order.user.displayName ?? l.item.order.user.username ?? l.item.order.user.email,
-    currentBid:   l.ebayListingId ? (livePrices.get(l.ebayListingId)?.currentPrice ?? null) : null,
-    bidCount:     l.ebayListingId ? (livePrices.get(l.ebayListingId)?.bidCount     ?? null) : null,
-    watchCount:   l.ebayListingId ? (livePrices.get(l.ebayListingId)?.watchCount   ?? null) : null,
-    endTime:      l.ebayListingId ? (livePrices.get(l.ebayListingId)?.endTime      ?? null) : null,
+    currentBid:    l.ebayListingId ? (livePrices.get(l.ebayListingId)?.currentPrice ?? null) : null,
+    bidCount:      l.ebayListingId ? (livePrices.get(l.ebayListingId)?.bidCount     ?? null) : null,
+    watchCount:    l.ebayListingId ? (livePrices.get(l.ebayListingId)?.watchCount   ?? null) : null,
+    endTime:       l.ebayListingId ? (livePrices.get(l.ebayListingId)?.endTime      ?? null) : null,
+    questionCount: l.ebayListingId ? (questionCounts.get(l.ebayListingId)             ?? 0)  : 0,
   }));
 
   const serializedInternal = savedInternalListings.map(l => ({
@@ -92,6 +95,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     bidCount:      l.ebayListingId ? (livePrices.get(l.ebayListingId)?.bidCount     ?? null) : null,
     watchCount:    l.ebayListingId ? (livePrices.get(l.ebayListingId)?.watchCount   ?? null) : null,
     endTime:       l.ebayListingId ? (livePrices.get(l.ebayListingId)?.endTime      ?? null) : null,
+    questionCount: l.ebayListingId ? (questionCounts.get(l.ebayListingId)             ?? 0)  : 0,
   }));
 
   return (

@@ -1347,3 +1347,21 @@ Mirrored the listings-page live data onto the admin consignment detail page (`/a
 **Data flow:** `page.tsx` now also calls `getLivePrices()` and merges `currentBid` / `bidCount` / `watchCount` / `endTime` into each `item.listing` before serializing. `ConsignmentOrderAdmin.tsx` got matching fields on its `Listing` interface, a `now` useState that ticks every 30s, and inline `timeLeft` / `endLabel` helpers (duplicated from the listings page rather than extracted — keeps each page self-contained).
 
 Hidden when listing isn't active or has no data, so sold/draft rows stay clean.
+---
+
+## 2026-05-28 — Bid count on direct listings + buyer-question count everywhere
+
+**Bid count (direct listings)**: `/api/admin/ebay/direct-listings/route.ts` now parses `<BidCount>` from the eBay response. The direct-listings table's price column shows "($X.XX (N bids))" alongside the price, matching the consigned/internal style.
+
+**Buyer-question counts**: new `lib/ebay-question-counts.ts` calls `GetMemberMessages` once per cache window (2 min, 30-day lookback, paginates up to 1000 messages), filters to `AskSellerQuestion` + `ContactEbayMember` types, and returns `Map<itemId, count>`.
+
+Wired into:
+- `app/admin/listings/page.tsx` — adds `questionCount` to the serialized consigned + internal rows.
+- `app/api/admin/ebay/direct-listings/route.ts` — adds `questionCount` to each direct listing in the response.
+- `app/admin/consignments/[id]/page.tsx` — adds `questionCount` to each item's `listing` block.
+
+**UI:** amber-coloured "💬 N questions" badge under watchers, on every section. Title tooltip says "Buyer questions in last 30 days". Hidden when 0.
+
+Cache lives in module scope so a single process amortizes the cost across requests. If eBay isn't connected or the API fails, the map is empty and badges don't appear — graceful degradation.
+
+Updated CLAUDE_CHANGELOG.md, CardCloud_SessionNotes.docx, CardCloud_SiteOverview.docx.

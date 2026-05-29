@@ -48,6 +48,7 @@ interface Listing {
   // Live data from eBay — only populated for active listings
   currentBid: number | null; bidCount: number | null;
   watchCount: number | null; endTime: string | null;
+  questionCount: number;
 }
 
 // Compact "Nd Nh left" countdown (kept in sync via the `now` useState below).
@@ -1045,6 +1046,9 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
                       )}
                       {item.listing?.status === "active" && (item.listing.watchCount ?? 0) > 0 && (
                         <span className="text-slate-500 text-xs" title="Watchers on eBay">👁 {item.listing.watchCount} watching</span>
+                      )}
+                      {(item.listing?.questionCount ?? 0) > 0 && (
+                        <span className="text-amber-700 text-xs" title="Buyer questions in last 30 days">💬 {item.listing!.questionCount} question{item.listing!.questionCount === 1 ? "" : "s"}</span>
                       )}
                       {item.listing?.status === "active" && timeLeft(item.listing.endTime, now) && (
                         <>

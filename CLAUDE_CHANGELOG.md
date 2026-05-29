@@ -1333,3 +1333,17 @@ Added an "ends Sun, May 31, 10:00 PM"-style line under the countdown on each act
 Helper: new `endLabel(endTime)` in `ListingsClient.tsx` formats the ISO timestamp using `toLocaleString` with `weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"` — picks up the admin's local timezone automatically.
 
 Only renders when there's actually an end time; suppressed alongside the countdown for non-active rows.
+---
+
+## 2026-05-28 — Countdown + end-time + watchers on consignment detail page
+
+Mirrored the listings-page live data onto the admin consignment detail page (`/admin/consignments/[id]`). For each item in the "Listed / Sold" section that's currently active on eBay, the right-hand badge stack now shows:
+
+- current bid + bid count (when there are bids)
+- 👁 N watching
+- Nd Nh left (ticking countdown, 30s clock)
+- ends Sun, May 31, 10:00 PM (local timezone)
+
+**Data flow:** `page.tsx` now also calls `getLivePrices()` and merges `currentBid` / `bidCount` / `watchCount` / `endTime` into each `item.listing` before serializing. `ConsignmentOrderAdmin.tsx` got matching fields on its `Listing` interface, a `now` useState that ticks every 30s, and inline `timeLeft` / `endLabel` helpers (duplicated from the listings page rather than extracted — keeps each page self-contained).
+
+Hidden when listing isn't active or has no data, so sold/draft rows stay clean.

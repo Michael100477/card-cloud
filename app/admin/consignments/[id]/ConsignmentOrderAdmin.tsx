@@ -45,6 +45,30 @@ interface Listing {
   playerOverride: string | null; yearOverride: number | null; manufacturerOverride: string | null;
   setOverride: string | null; cardNumberOverride: string | null;
   scheduledTime: string | null; privateListing: boolean | null;
+  // Live data from eBay — only populated for active listings
+  currentBid: number | null; bidCount: number | null;
+  watchCount: number | null; endTime: string | null;
+}
+
+// Compact "Nd Nh left" countdown (kept in sync via the `now` useState below).
+function timeLeft(endTime: string | null, now: number): string | null {
+  if (!endTime) return null;
+  const diffMs = new Date(endTime).getTime() - now;
+  if (diffMs <= 0) return "ended";
+  const m = Math.floor(diffMs / 60_000);
+  if (m < 1)  return "ending soon";
+  if (m < 60) return `${m}m left`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m left`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h left`;
+}
+function endLabel(endTime: string | null): string | null {
+  if (!endTime) return null;
+  return new Date(endTime).toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+    hour:    "numeric", minute: "2-digit",
+  });
 }
 
 interface Item {
@@ -378,6 +402,13 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
   const [catStatus,     setCatStatus]     = useState<"loading" | "ok" | "error">("loading");
   const [shippingRules,    setShippingRules]    = useState<{ id: string; name: string }[]>([]);
   const [shippingRulesSrc, setShippingRulesSrc] = useState<"loading" | "ok" | "none">("loading");
+
+  // Ticking clock for the "time left" labels on active eBay listings.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     fetch("/api/admin/ebay/shipping-rules")
@@ -1009,6 +1040,18 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ITEM_STATUS_STYLE[item.status] ?? ""}`}>{item.status}</span>
                       {item.listing?.url && <a href={item.listing.url} target="_blank" rel="noopener noreferrer" className="text-brand text-xs hover:underline">eBay →</a>}
                       {item.listing?.soldPrice && <span className="text-green-600 text-xs font-semibold">Sold ${item.listing.soldPrice.toLocaleString()}</span>}
+                      {item.listing?.status === "active" && item.listing.currentBid != null && (item.listing.bidCount ?? 0) > 0 && (
+                        <span className="text-green-700 text-xs font-semibold">${item.listing.currentBid.toFixed(2)} ({item.listing.bidCount} bid{item.listing.bidCount === 1 ? "" : "s"})</span>
+                      )}
+                      {item.listing?.status === "active" && (item.listing.watchCount ?? 0) > 0 && (
+                        <span className="text-slate-500 text-xs" title="Watchers on eBay">👁 {item.listing.watchCount} watching</span>
+                      )}
+                      {item.listing?.status === "active" && timeLeft(item.listing.endTime, now) && (
+                        <>
+                          <span className="text-navy text-xs">{timeLeft(item.listing.endTime, now)}</span>
+                          <span className="text-slate-500 text-xs">ends {endLabel(item.listing.endTime)}</span>
+                        </>
+                      )}
                       {item.status === "listed" && item.listing?.status === "active" && !draft.open && (
                         <button
                           onClick={() => {

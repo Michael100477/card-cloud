@@ -3,6 +3,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { getPageLayout } from "@/lib/layout";
 import { getEbayListingDefaults } from "@/lib/ebay-listing-defaults";
+import { getLivePrices } from "@/lib/ebay-live-prices";
 import { ConsignmentOrderAdmin } from "./ConsignmentOrderAdmin";
 
 interface Props { params: Promise<{ id: string }> }
@@ -10,7 +11,7 @@ interface Props { params: Promise<{ id: string }> }
 export default async function AdminConsignmentDetailPage({ params }: Props) {
   const { id } = await params;
 
-  const [order, ebayLayout, ebayDefaults] = await Promise.all([
+  const [order, ebayLayout, ebayDefaults, livePrices] = await Promise.all([
     db.consignmentOrder.findUnique({
     where:   { id },
       include: {
@@ -20,6 +21,7 @@ export default async function AdminConsignmentDetailPage({ params }: Props) {
     }),
     getPageLayout("ebay_listing"),
     getEbayListingDefaults(),
+    getLivePrices(),
   ]);
 
   if (!order) notFound();
@@ -59,6 +61,11 @@ export default async function AdminConsignmentDetailPage({ params }: Props) {
         updatedAt:       item.listing.updatedAt.toISOString(),
         listedAt:        item.listing.listedAt?.toISOString() ?? null,
         soldAt:          item.listing.soldAt?.toISOString()   ?? null,
+        // Live data from eBay (same 60s cache as the admin/listings page)
+        currentBid:  item.listing.ebayListingId ? (livePrices.get(item.listing.ebayListingId)?.currentPrice ?? null) : null,
+        bidCount:    item.listing.ebayListingId ? (livePrices.get(item.listing.ebayListingId)?.bidCount     ?? null) : null,
+        watchCount:  item.listing.ebayListingId ? (livePrices.get(item.listing.ebayListingId)?.watchCount   ?? null) : null,
+        endTime:     item.listing.ebayListingId ? (livePrices.get(item.listing.ebayListingId)?.endTime      ?? null) : null,
       } : null,
     })),
   };

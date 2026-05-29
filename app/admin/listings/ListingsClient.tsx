@@ -13,7 +13,7 @@ interface Listing {
   listedAt: string | null; orderId: string; itemId: string;
   player: string; year: number | null; set: string | null;
   grade: string | null; gradeCompany: string | null; ownerName: string;
-  currentBid: number | null; bidCount: number | null;
+  currentBid: number | null; bidCount: number | null; watchCount: number | null;
 }
 
 interface InternalListing {
@@ -24,13 +24,14 @@ interface InternalListing {
   listedAt: string | null; scheduledTime: string | null;
   player: string; year: number | null;
   set: string | null; grade: string | null; gradeCompany: string | null;
-  currentBid: number | null; bidCount: number | null;
+  currentBid: number | null; bidCount: number | null; watchCount: number | null;
 }
 
 interface DirectListing {
   ebayItemId: string; title: string | null;
   startPrice: number; currentPrice: number; binPrice: number | null;
-  quantitySold: number; startTime: string | null; endTime: string | null;
+  quantitySold: number; watchCount: number;
+  startTime: string | null; endTime: string | null;
   url: string | null;
 }
 
@@ -294,6 +295,9 @@ export function ListingsClient({
                       <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
                       {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
                       {l.soldPrice && <p className="text-green-600 font-semibold text-xs">Sold ${usd(l.soldPrice)}</p>}
+                      {l.status === "active" && (l.watchCount ?? 0) > 0 && (
+                        <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
+                      )}
                     </td>
                     <td className="px-5 py-3">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[l.status] ?? "bg-slate-100 text-slate-500"}`}>{l.status}</span>
@@ -437,6 +441,9 @@ export function ListingsClient({
                         <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
                         {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
                         {l.soldPrice && <p className="text-green-600 font-semibold text-xs">Sold ${usd(l.soldPrice)}</p>}
+                        {l.status === "active" && (l.watchCount ?? 0) > 0 && (
+                          <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
+                        )}
                       </td>
                       <td className="px-5 py-3">
                         {(() => {
@@ -530,6 +537,9 @@ export function ListingsClient({
                               <p className="text-navy font-medium text-xs">${usd(l.currentPrice)}</p>
                               {l.binPrice !== null && <p className="text-slate-400 text-xs">BIN ${usd(l.binPrice)}</p>}
                               {l.quantitySold > 0 && <p className="text-green-600 text-xs">{l.quantitySold} sold</p>}
+                              {l.watchCount > 0 && (
+                                <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
+                              )}
                             </td>
                             <td className="px-5 py-3 text-slate-400 text-xs">
                               {l.endTime ? new Date(l.endTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}

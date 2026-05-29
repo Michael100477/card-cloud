@@ -67,6 +67,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     ownerName:    l.item.order.user.displayName ?? l.item.order.user.username ?? l.item.order.user.email,
     currentBid:   l.ebayListingId ? (livePrices.get(l.ebayListingId)?.currentPrice ?? null) : null,
     bidCount:     l.ebayListingId ? (livePrices.get(l.ebayListingId)?.bidCount     ?? null) : null,
+    watchCount:   l.ebayListingId ? (livePrices.get(l.ebayListingId)?.watchCount   ?? null) : null,
   }));
 
   const serializedInternal = savedInternalListings.map(l => ({
@@ -88,6 +89,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     gradeCompany:  l.gradeCompany,
     currentBid:    l.ebayListingId ? (livePrices.get(l.ebayListingId)?.currentPrice ?? null) : null,
     bidCount:      l.ebayListingId ? (livePrices.get(l.ebayListingId)?.bidCount     ?? null) : null,
+    watchCount:    l.ebayListingId ? (livePrices.get(l.ebayListingId)?.watchCount   ?? null) : null,
   }));
 
   return (

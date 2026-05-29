@@ -19,6 +19,7 @@ function attr(block: string, tag: string): string | null {
 export interface LivePrice {
   currentPrice: number;
   bidCount:     number;
+  watchCount:   number;
 }
 
 let cache: { at: number; data: Map<string, LivePrice> } | null = null;
@@ -83,7 +84,8 @@ export async function getLivePrices(): Promise<Map<string, LivePrice>> {
     const startPrice = parseFloat(attr(block, "StartPrice") ?? "0") || 0;
     const currentPrice = parseFloat(attr(block, "CurrentPrice") ?? String(startPrice)) || startPrice;
     const bidCount = parseInt(attr(block, "BidCount") ?? "0") || 0;
-    result.set(itemId, { currentPrice, bidCount });
+    const watchCount = parseInt(attr(block, "WatchCount") ?? "0") || 0;
+    result.set(itemId, { currentPrice, bidCount, watchCount });
   }
 
   cache = { at: Date.now(), data: result };

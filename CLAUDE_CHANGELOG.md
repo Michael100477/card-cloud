@@ -1277,3 +1277,21 @@ Files changed:
 - `package-lock.json` (+ `@aws-sdk/client-s3` added)
 
 **Still to do:** Mike walks through Railway signup + R2 bucket creation, pastes env vars, first deploy, smoke test. Custom domain cutover happens later.
+
+---
+
+## 2026-05-28 — Watcher count on active eBay listings
+
+Added "👁 N watching" badge under the price column on the admin eBay listings page for every active listing (consigned, internal, AND direct).
+
+**Data source:** eBay already returns `<WatchCount>` per item in the existing `GetMyeBaySelling` Active List response — no new API call needed. Picks up the same 1-minute cache that powers live bid counts.
+
+**Files:**
+- `lib/ebay-live-prices.ts`: added `watchCount` to `LivePrice` interface, parse it from XML.
+- `app/admin/listings/page.tsx`: serialize `watchCount` into both consigned + internal listing rows.
+- `app/admin/listings/ListingsClient.tsx`: extend `Listing` / `InternalListing` / `DirectListing` interfaces, render the badge under price (only when watchers > 0 AND status is active).
+- `app/api/admin/ebay/direct-listings/route.ts`: parse + return `watchCount` for direct listings.
+
+**UX:** small grey 👁 N watching line under the price/BIN/sold prices. Hover tooltip says "Watchers on eBay". Suppressed when 0 watchers or non-active status (no point showing 0 on a sold listing).
+
+Updated CLAUDE_CHANGELOG.md, CardCloud_SessionNotes.docx, and CardCloud_SiteOverview.docx.

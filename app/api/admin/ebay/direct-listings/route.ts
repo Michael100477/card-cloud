@@ -106,6 +106,7 @@ export async function GET() {
     const binPrice   = binStr ? parseFloat(binStr) : null;
     const currentPrice = parseFloat(attr(block, "CurrentPrice") ?? String(startPrice));
     const quantitySold = parseInt(attr(block, "QuantitySold") ?? "0");
+    const watchCount   = parseInt(attr(block, "WatchCount") ?? "0") || 0;
     return {
       ebayItemId:   itemId,
       title:        attr(block, "Title"),
@@ -113,6 +114,7 @@ export async function GET() {
       currentPrice,
       binPrice:     binPrice && !isNaN(binPrice) ? binPrice : null,
       quantitySold,
+      watchCount,
       startTime:    attr(block, "StartTime"),
       endTime:      attr(block, "EndTime"),
       url:          attr(block, "ViewItemURL"),

@@ -1315,3 +1315,12 @@ Added a ticking "Nd Nh left" countdown to each active listing's "Listed" column 
 **Suppressed for:** non-active listings on consigned/internal sections (no point counting down on a sold/scheduled row). Direct listings always show the countdown if `endTime` is set.
 
 Updated CLAUDE_CHANGELOG.md, CardCloud_SessionNotes.docx, and CardCloud_SiteOverview.docx.
+---
+
+## 2026-05-28 — Fix: eBay TimeLeft, not EndTime
+
+The previous "remaining time" feature wired up `<EndTime>` from the eBay response, but eBay's `GetMyeBaySelling` active list does NOT return `<EndTime>` — it returns `<TimeLeft>` as an ISO 8601 duration (e.g. `P2DT9H16M29S` = 2 days, 9 hours, 16 minutes, 29 seconds) plus a separate `<StartTime>`.
+
+Added a `durationToMs()` helper in both `lib/ebay-live-prices.ts` and `app/api/admin/ebay/direct-listings/route.ts` that parses the ISO 8601 duration and converts it into an effective end timestamp (`Date.now() + durationMs`). The rest of the UI code (countdown rendering, 30s ticking clock) works unchanged.
+
+Verified live against production eBay account — TimeLeft is present on every active item.

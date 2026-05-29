@@ -16,6 +16,17 @@ function attr(block: string, tag: string): string | null {
   return block.match(new RegExp(`<${tag}[^>]*>([^<]+)<\\/${tag}>`))?.[1]?.trim() ?? null;
 }
 
+// eBay returns <TimeLeft> as an ISO 8601 duration like "P2DT9H16M29S" — it
+// does NOT include <EndTime> in the active-list response. Convert to an
+// effective end timestamp so the UI can countdown against it.
+function durationToMs(iso: string | null): number | null {
+  if (!iso) return null;
+  const m = iso.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+  if (!m) return null;
+  const [, d, h, mn, s] = m;
+  return ((+(d ?? 0)) * 86400 + (+(h ?? 0)) * 3600 + (+(mn ?? 0)) * 60 + (+(s ?? 0))) * 1000;
+}
+
 export async function GET() {
   try { await requireAdmin(); } catch (e) {
     return NextResponse.json({ error: (e as AdminError).message }, { status: (e as AdminError).status ?? 403 });
@@ -107,6 +118,10 @@ export async function GET() {
     const currentPrice = parseFloat(attr(block, "CurrentPrice") ?? String(startPrice));
     const quantitySold = parseInt(attr(block, "QuantitySold") ?? "0");
     const watchCount   = parseInt(attr(block, "WatchCount") ?? "0") || 0;
+    const timeLeftMs   = durationToMs(attr(block, "TimeLeft"));
+    const endTime      = timeLeftMs != null && timeLeftMs > 0
+      ? new Date(Date.now() + timeLeftMs).toISOString()
+      : null;
     return {
       ebayItemId:   itemId,
       title:        attr(block, "Title"),
@@ -116,7 +131,7 @@ export async function GET() {
       quantitySold,
       watchCount,
       startTime:    attr(block, "StartTime"),
-      endTime:      attr(block, "EndTime"),
+      endTime,
       url:          attr(block, "ViewItemURL"),
     };
   }).filter(l => l.ebayItemId && !knownIds.has(l.ebayItemId));

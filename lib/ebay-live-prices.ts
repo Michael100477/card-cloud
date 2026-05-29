@@ -16,6 +16,17 @@ function attr(block: string, tag: string): string | null {
   return block.match(new RegExp(`<${tag}[^>]*>([^<]+)<\\/${tag}>`))?.[1]?.trim() ?? null;
 }
 
+// eBay returns time-left as an ISO 8601 duration like "P2DT9H16M29S".
+// (eBay does not return <EndTime> on the active-list response — it returns
+// <TimeLeft> as a duration we have to convert to an end timestamp.)
+function durationToMs(iso: string | null): number | null {
+  if (!iso) return null;
+  const m = iso.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+  if (!m) return null;
+  const [, d, h, mn, s] = m;
+  return ((+(d ?? 0)) * 86400 + (+(h ?? 0)) * 3600 + (+(mn ?? 0)) * 60 + (+(s ?? 0))) * 1000;
+}
+
 export interface LivePrice {
   currentPrice: number;
   bidCount:     number;
@@ -86,7 +97,10 @@ export async function getLivePrices(): Promise<Map<string, LivePrice>> {
     const currentPrice = parseFloat(attr(block, "CurrentPrice") ?? String(startPrice)) || startPrice;
     const bidCount = parseInt(attr(block, "BidCount") ?? "0") || 0;
     const watchCount = parseInt(attr(block, "WatchCount") ?? "0") || 0;
-    const endTime = attr(block, "EndTime");
+    const timeLeftMs = durationToMs(attr(block, "TimeLeft"));
+    const endTime    = timeLeftMs != null && timeLeftMs > 0
+      ? new Date(Date.now() + timeLeftMs).toISOString()
+      : null;
     result.set(itemId, { currentPrice, bidCount, watchCount, endTime });
   }
 

@@ -7,6 +7,22 @@ import { useRouter, useSearchParams } from "next/navigation";
 // US dollar formatter — always two decimals (so $17.5 displays as $17.50).
 const usd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Compact "how long until X" string, e.g. "5d 2h left", "47m left", "ending soon", "ended".
+// Pass `now` so all rows render against the same client-ticked clock — see the
+// `now` useState in ListingsClient that bumps every 30s.
+function timeLeft(endTime: string | null, now: number): string | null {
+  if (!endTime) return null;
+  const diffMs = new Date(endTime).getTime() - now;
+  if (diffMs <= 0) return "ended";
+  const m = Math.floor(diffMs / 60_000);
+  if (m < 1)  return "ending soon";
+  if (m < 60) return `${m}m left`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m left`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h left`;
+}
+
 interface Listing {
   id: string; title: string; status: string; url: string | null;
   startPrice: number; buyItNowPrice: number | null; soldPrice: number | null;
@@ -14,6 +30,7 @@ interface Listing {
   player: string; year: number | null; set: string | null;
   grade: string | null; gradeCompany: string | null; ownerName: string;
   currentBid: number | null; bidCount: number | null; watchCount: number | null;
+  endTime: string | null;
 }
 
 interface InternalListing {
@@ -25,6 +42,7 @@ interface InternalListing {
   player: string; year: number | null;
   set: string | null; grade: string | null; gradeCompany: string | null;
   currentBid: number | null; bidCount: number | null; watchCount: number | null;
+  endTime: string | null;
 }
 
 interface DirectListing {
@@ -84,6 +102,14 @@ export function ListingsClient({
 
   // Expandable detail rows for direct listings
   const [expandedItem,   setExpandedItem]   = useState<string | null>(null);
+
+  // Ticking clock for "time left" labels — bumps every 30s so the
+  // countdown stays accurate without a full page refresh.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const [detailCache,    setDetailCache]    = useState<Record<string, DirectDetail>>({});
   const [detailLoading,  setDetailLoading]  = useState<string | null>(null);
   const [detailError,    setDetailError]    = useState<Record<string, string>>({});
@@ -302,7 +328,12 @@ export function ListingsClient({
                     <td className="px-5 py-3">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[l.status] ?? "bg-slate-100 text-slate-500"}`}>{l.status}</span>
                     </td>
-                    <td className="px-5 py-3 text-slate-400 text-xs">{l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}</td>
+                    <td className="px-5 py-3 text-slate-400 text-xs">
+                      {l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}
+                      {l.status === "active" && timeLeft(l.endTime, now) && (
+                        <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                      )}
+                    </td>
                     <td className="px-5 py-3">
                       <div className="flex flex-col gap-1.5 items-start">
                         {l.status === "draft" && (
@@ -459,7 +490,12 @@ export function ListingsClient({
                           );
                         })()}
                       </td>
-                      <td className="px-5 py-3 text-slate-400 text-xs">{l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}</td>
+                      <td className="px-5 py-3 text-slate-400 text-xs">
+                        {l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}
+                        {l.status === "active" && timeLeft(l.endTime, now) && (
+                          <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                        )}
+                      </td>
                       <td className="px-5 py-3">
                         <div className="flex flex-col gap-1.5 items-start">
                           <Link href={`/admin/internal-listings/${l.id}`} className="text-brand text-xs hover:underline font-medium">
@@ -543,6 +579,9 @@ export function ListingsClient({
                             </td>
                             <td className="px-5 py-3 text-slate-400 text-xs">
                               {l.endTime ? new Date(l.endTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                              {timeLeft(l.endTime, now) && (
+                                <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                              )}
                             </td>
                             <td className="px-5 py-3">
                               <div className="flex flex-col gap-1.5 items-start">

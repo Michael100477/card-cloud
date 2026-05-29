@@ -1295,3 +1295,23 @@ Added "👁 N watching" badge under the price column on the admin eBay listings 
 **UX:** small grey 👁 N watching line under the price/BIN/sold prices. Hover tooltip says "Watchers on eBay". Suppressed when 0 watchers or non-active status (no point showing 0 on a sold listing).
 
 Updated CLAUDE_CHANGELOG.md, CardCloud_SessionNotes.docx, and CardCloud_SiteOverview.docx.
+---
+
+## 2026-05-28 — Remaining time on active eBay listings
+
+Added a ticking "Nd Nh left" countdown to each active listing's "Listed" column on the admin eBay listings page (consigned, internal) and to the "Ends" column on direct listings.
+
+**Data source:** the existing `GetMyeBaySelling` Active List response already includes `<EndTime>` per item. Threaded through `lib/ebay-live-prices.ts` -> `app/admin/listings/page.tsx` serialization -> `ListingsClient.tsx`. Shares the same 1-minute cache as bid and watcher counts.
+
+**Formatting helper** (`timeLeft(endTime, now)` in `ListingsClient.tsx`):
+- > 24h → `Nd Nh left`
+- 1-24h → `Nh Nm left`
+- 1-59m → `Nm left`
+- < 1m → `ending soon`
+- past EndTime → `ended`
+
+**Ticking countdown:** added a `now` useState in `ListingsClient` that bumps every 30s; `timeLeft()` takes `now` as a parameter so every row re-renders with the same fresh clock. No new network calls — only the displayed text changes.
+
+**Suppressed for:** non-active listings on consigned/internal sections (no point counting down on a sold/scheduled row). Direct listings always show the countdown if `endTime` is set.
+
+Updated CLAUDE_CHANGELOG.md, CardCloud_SessionNotes.docx, and CardCloud_SiteOverview.docx.

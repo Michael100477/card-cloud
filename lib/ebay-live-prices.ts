@@ -20,6 +20,7 @@ export interface LivePrice {
   currentPrice: number;
   bidCount:     number;
   watchCount:   number;
+  endTime:      string | null;  // ISO timestamp when eBay ends the listing
 }
 
 let cache: { at: number; data: Map<string, LivePrice> } | null = null;
@@ -85,7 +86,8 @@ export async function getLivePrices(): Promise<Map<string, LivePrice>> {
     const currentPrice = parseFloat(attr(block, "CurrentPrice") ?? String(startPrice)) || startPrice;
     const bidCount = parseInt(attr(block, "BidCount") ?? "0") || 0;
     const watchCount = parseInt(attr(block, "WatchCount") ?? "0") || 0;
-    result.set(itemId, { currentPrice, bidCount, watchCount });
+    const endTime = attr(block, "EndTime");
+    result.set(itemId, { currentPrice, bidCount, watchCount, endTime });
   }
 
   cache = { at: Date.now(), data: result };

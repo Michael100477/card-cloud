@@ -1324,3 +1324,12 @@ The previous "remaining time" feature wired up `<EndTime>` from the eBay respons
 Added a `durationToMs()` helper in both `lib/ebay-live-prices.ts` and `app/api/admin/ebay/direct-listings/route.ts` that parses the ISO 8601 duration and converts it into an effective end timestamp (`Date.now() + durationMs`). The rest of the UI code (countdown rendering, 30s ticking clock) works unchanged.
 
 Verified live against production eBay account — TimeLeft is present on every active item.
+---
+
+## 2026-05-28 — Show end day + exact time next to the countdown
+
+Added an "ends Sun, May 31, 10:00 PM"-style line under the countdown on each active listing (consigned, internal). Direct listings now render the same day/time format in their Ends column instead of a bare date.
+
+Helper: new `endLabel(endTime)` in `ListingsClient.tsx` formats the ISO timestamp using `toLocaleString` with `weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"` — picks up the admin's local timezone automatically.
+
+Only renders when there's actually an end time; suppressed alongside the countdown for non-active rows.

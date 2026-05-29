@@ -23,6 +23,15 @@ function timeLeft(endTime: string | null, now: number): string | null {
   return `${d}d ${h % 24}h left`;
 }
 
+// Absolute end-time label, e.g. "Sun, May 31, 10:00 PM" — local time of the admin.
+function endLabel(endTime: string | null): string | null {
+  if (!endTime) return null;
+  return new Date(endTime).toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+    hour:    "numeric", minute: "2-digit",
+  });
+}
+
 interface Listing {
   id: string; title: string; status: string; url: string | null;
   startPrice: number; buyItNowPrice: number | null; soldPrice: number | null;
@@ -331,7 +340,10 @@ export function ListingsClient({
                     <td className="px-5 py-3 text-slate-400 text-xs">
                       {l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}
                       {l.status === "active" && timeLeft(l.endTime, now) && (
-                        <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                        <>
+                          <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                          <p className="text-slate-500 text-xs">ends {endLabel(l.endTime)}</p>
+                        </>
                       )}
                     </td>
                     <td className="px-5 py-3">
@@ -493,7 +505,10 @@ export function ListingsClient({
                       <td className="px-5 py-3 text-slate-400 text-xs">
                         {l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}
                         {l.status === "active" && timeLeft(l.endTime, now) && (
-                          <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                          <>
+                            <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                            <p className="text-slate-500 text-xs">ends {endLabel(l.endTime)}</p>
+                          </>
                         )}
                       </td>
                       <td className="px-5 py-3">
@@ -578,7 +593,7 @@ export function ListingsClient({
                               )}
                             </td>
                             <td className="px-5 py-3 text-slate-400 text-xs">
-                              {l.endTime ? new Date(l.endTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                              {endLabel(l.endTime) ?? "—"}
                               {timeLeft(l.endTime, now) && (
                                 <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
                               )}

@@ -86,6 +86,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { id: user.id },
           data: {
             username,
+            // Copy the OAuth provider fields (which Auth.js writes to name +
+            // image) into the app's preferred displayName + profilePhoto
+            // columns, but only if those aren't already populated.
+            ...(user.name  ? { displayName:  user.name }  : {}),
+            ...(user.image ? { profilePhoto: user.image } : {}),
             planTier: "TRIAL",
             trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           },

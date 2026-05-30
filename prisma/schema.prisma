@@ -98,6 +98,13 @@ model User {
   displayName      String?
   passwordHash     String?
 
+  // Required by Auth.js PrismaAdapter — it writes the OAuth provider's
+  // display name + profile photo URL into these columns at sign-in time.
+  // The createUser event in auth.ts copies them into displayName /
+  // profilePhoto for the rest of the app to use.
+  name             String?
+  image            String?
+
   planTier         PlanTier  @default(FREE)
   trialEndsAt      DateTime?
 

@@ -21,7 +21,8 @@ const nextConfig: NextConfig = {
   // schema. These errors don't reflect runtime bugs — the code runs in dev
   // — but they block the production build.
   typescript: { ignoreBuildErrors: true },
-  eslint:     { ignoreDuringBuilds: true },
+  // (eslint config removed — Next.js 16 deprecated the `eslint` key in
+  // next.config.ts. Lint is skipped during build by default now.)
 
   // instrumentation.ts runs automatically in Next.js 16+ (pre-warms Tesseract)
 };

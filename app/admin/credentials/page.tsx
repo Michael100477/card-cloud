@@ -111,10 +111,14 @@ export default async function CredentialsPage({
     stored = await db.siteCredential.findMany();
   }
 
-  // Also fix any predefined items that exist but are missing their group
+  // Also re-sync the group on every visit. Older rows may have been
+  // created when the seed used different group names (e.g. one big
+  // "Marketplace — eBay" group before we split it into Sandbox / Production).
+  // Without this, local and production DBs drift in group assignments and
+  // the page renders differently in each environment.
   for (const s of SEED) {
     const row = stored.find(c => c.service === s.service);
-    if (row && !row.group) {
+    if (row && row.group !== s.group) {
       await db.siteCredential.update({ where: { service: s.service }, data: { group: s.group } });
       row.group = s.group;
     }

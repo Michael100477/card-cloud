@@ -8,6 +8,10 @@ import { db } from "@/lib/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
+  // Required when deploying behind a proxy (Railway, Vercel, etc.). Without
+  // this, Auth.js v5 returns `?error=Configuration` because it can't verify
+  // the incoming Host header matches its own URL.
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,

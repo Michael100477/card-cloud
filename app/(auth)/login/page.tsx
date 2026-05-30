@@ -1,12 +1,22 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { loginAction } from "@/lib/actions/auth";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
 
 export default function LoginPage() {
+  // Wrap useSearchParams in Suspense — Next.js requires this so build-time
+  // prerender doesn't try to evaluate URL-dependent code statically.
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const [showPass, setShowPass]     = useState(false);
   const [error, setError]           = useState("");
   const [isPending, startTransition] = useTransition();

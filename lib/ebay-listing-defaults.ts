@@ -7,8 +7,14 @@ import type { EbayListingDefaults } from "./ebay-listing-defaults-shared";
 
 export async function getEbayListingDefaults(): Promise<EbayListingDefaults> {
   const keys = FIELD_CONFIGS.map(f => f.key);
-  const rows = await db.siteSetting.findMany({ where: { key: { in: keys } } });
-  const map  = new Map(rows.map(r => [r.key, r.value]));
+  let map: Map<string, string>;
+  try {
+    const rows = await db.siteSetting.findMany({ where: { key: { in: keys } } });
+    map = new Map(rows.map(r => [r.key, r.value]));
+  } catch {
+    // Build-time prerender or DB temporarily unreachable — return defaults.
+    map = new Map();
+  }
 
   return Object.fromEntries(
     FIELD_CONFIGS.map(f => {

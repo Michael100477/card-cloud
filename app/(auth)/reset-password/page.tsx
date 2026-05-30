@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { resetPasswordAction } from "@/lib/actions/auth";
@@ -13,6 +13,15 @@ const RULES = [
 ];
 
 export default function ResetPasswordPage() {
+  // Wrap useSearchParams in Suspense for prerender compatibility.
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordInner />
+    </Suspense>
+  );
+}
+
+function ResetPasswordInner() {
   const [password, setPassword]     = useState("");
   const [showPass, setShowPass]     = useState(false);
   const [error, setError]           = useState("");

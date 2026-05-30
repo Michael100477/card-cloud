@@ -57,6 +57,10 @@ export default async function AdminConsignmentDetailPage({ params }: Props) {
         dimLength:       item.listing.dimLength       ? Number(item.listing.dimLength)       : null,
         dimWidth:        item.listing.dimWidth        ? Number(item.listing.dimWidth)        : null,
         dimHeight:       item.listing.dimHeight       ? Number(item.listing.dimHeight)       : null,
+        // Custom specifics — Prisma returns JsonValue, narrow to the shape the UI expects
+        customSpecifics: Array.isArray(item.listing.customSpecifics)
+          ? (item.listing.customSpecifics as { name: string; value: string }[])
+          : null,
         // Dates → ISO strings
         scheduledTime:   item.listing.scheduledTime?.toISOString() ?? null,
         createdAt:       item.listing.createdAt.toISOString(),

@@ -182,7 +182,7 @@ export function InternalListingEditor({
   // graded/ungraded defaults from ebayDefaults. Only applies for new listings —
   // skip the reset when editing an existing listing so we don't overwrite saved values.
   function setGraded(next: boolean | ((g: boolean) => boolean)) {
-    _setGraded(prev => {
+    _setGraded((prev: boolean) => {
       const newGraded = typeof next === "function" ? next(prev) : next;
       if (!e) {
         const ld = ebayDefaults;

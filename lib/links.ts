@@ -60,22 +60,33 @@ export const SECTION_ORDER = [
   "Footer — Platform", "Footer — Company", "Social Media", "Dashboard Sections",
 ];
 
-/** Load all links from the database. */
+/** Load all links from the database. Falls back to the seed defaults if the DB
+ *  isn't available (build-time prerender, migration pending, transient failure). */
 export async function getLinksMap(): Promise<LinksMap> {
-  const rows = await db.siteLink.findMany({ orderBy: [{ order: "asc" }] });
-  const map: LinksMap = {};
-  for (const r of rows) {
-    map[r.key] = { key: r.key, section: r.section, label: r.label, href: r.href, enabled: r.enabled, order: r.order };
+  try {
+    const rows = await db.siteLink.findMany({ orderBy: [{ order: "asc" }] });
+    const map: LinksMap = {};
+    for (const r of rows) {
+      map[r.key] = { key: r.key, section: r.section, label: r.label, href: r.href, enabled: r.enabled, order: r.order };
+    }
+    return map;
+  } catch {
+    const map: LinksMap = {};
+    for (const l of LINK_SEED) map[l.key] = l;
+    return map;
   }
-  return map;
 }
 
-/** Seed any missing links into the database. Safe to call on every server render. */
+/** Seed any missing links into the database. No-op if the DB isn't reachable. */
 export async function seedLinks(): Promise<void> {
-  const existing = await db.siteLink.findMany({ select: { key: true } });
-  const existingKeys = new Set(existing.map(l => l.key));
-  const toCreate = LINK_SEED.filter(l => !existingKeys.has(l.key));
-  if (toCreate.length > 0) {
-    await db.siteLink.createMany({ data: toCreate });
+  try {
+    const existing = await db.siteLink.findMany({ select: { key: true } });
+    const existingKeys = new Set(existing.map(l => l.key));
+    const toCreate = LINK_SEED.filter(l => !existingKeys.has(l.key));
+    if (toCreate.length > 0) {
+      await db.siteLink.createMany({ data: toCreate });
+    }
+  } catch {
+    // Build-time prerender or migration pending — skip silently.
   }
 }

@@ -27,14 +27,14 @@ interface Listing {
   id: string; status: string; title: string; url: string | null;
   startPrice: number; buyItNowPrice: number | null; soldPrice: number | null;
   subtitle: string | null; description: string;
-  reservePrice: number | null; listingType: string; auctionDuration: number;
+  reservePrice: number | null; listingType: string | null; auctionDuration: number | null;
   freeShipping: boolean; allowOffers: boolean; minimumOffer: number | null; autoAcceptOffer: number | null;
-  shippingMethod: string; shippingCostType: string; flatRateShipping: number | null;
+  shippingMethod: string | null; shippingCostType: string | null; flatRateShipping: number | null;
   excludedLocations: string[]; combinedShippingRule: string | null;
-  weightLbs: number; weightOz: number | null; dimLength: number | null; dimWidth: number | null; dimHeight: number | null;
+  weightLbs: number | null; weightOz: number | null; dimLength: number | null; dimWidth: number | null; dimHeight: number | null;
   condition: string | null; conditionType: string | null;
   gradeCompanyEbay: string | null; gradeEbay: string | null; certNumberEbay: string | null; cardCondition: string | null;
-  categoryId: string; sport: string | null; team: string | null; league: string | null; season: string | null;
+  categoryId: string | null; sport: string | null; team: string | null; league: string | null; season: string | null;
   parallel: string | null; features: string[]; cardName: string | null; cardType: string | null;
   cardSize: string | null; countryOfOrigin: string | null;
   signedBy: string | null; autographAuthentication: string | null;
@@ -715,7 +715,13 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
         ...o,
         items: o.items.map(i => i.id === itemId ? {
           ...i, status: "listed",
-          listing: { id: d.id, status: "draft", title: draft.title, url: draft.url || null, startPrice: parseFloat(draft.startPrice), buyItNowPrice: draft.buyItNowPrice ? parseFloat(draft.buyItNowPrice) : null, soldPrice: null },
+          listing: {
+            ...(i.listing ?? {} as Listing),
+            id: d.id, status: "draft", title: draft.title, url: draft.url || null,
+            startPrice: parseFloat(draft.startPrice),
+            buyItNowPrice: draft.buyItNowPrice ? parseFloat(draft.buyItNowPrice) : null,
+            soldPrice: null,
+          },
         } : i),
       }));
     } catch (e) {

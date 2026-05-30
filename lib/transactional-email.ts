@@ -95,6 +95,43 @@ export function consignmentReceivedHtml(opts: {
   </div>`;
 }
 
+export function listingsReadyHtml(opts: {
+  userName: string;
+  orderRef: string;
+  trackUrl: string;
+  listings: { player: string; title: string; url: string | null; startPrice: number; buyItNowPrice: number | null }[];
+}): string {
+  const rows = opts.listings.map(l => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0">
+        <div style="color:#042C53;font-weight:600;font-size:14px">${l.player}</div>
+        <div style="color:#64748b;font-size:12px;margin-top:2px">${l.title}</div>
+      </td>
+      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:right;white-space:nowrap;vertical-align:top">
+        <div style="color:#042C53;font-weight:600;font-size:13px">$${l.startPrice.toFixed(2)}${l.buyItNowPrice ? ` &middot; BIN $${l.buyItNowPrice.toFixed(2)}` : ""}</div>
+        ${l.url ? `<a href="${l.url}" style="color:#EF9F27;font-size:12px;text-decoration:none">View on eBay →</a>` : ""}
+      </td>
+    </tr>`).join("");
+
+  return `
+  <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
+    <div style="background:#042C53;padding:20px 24px">
+      <p style="color:#fff;font-weight:bold;margin:0;font-size:18px">☁ The Card Cloud</p>
+    </div>
+    <div style="padding:24px;background:#fff">
+      <h2 style="color:#042C53;margin:0 0 16px">Your cards are live on eBay, ${opts.userName}!</h2>
+      <p style="color:#334155;line-height:1.6">All ${opts.listings.length} card${opts.listings.length === 1 ? "" : "s"} from order <strong>${opts.orderRef}</strong> are now listed.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0">${rows}</table>
+      <p style="margin:24px 0 8px">
+        <a href="${opts.trackUrl}" style="background:#EF9F27;color:#412402;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Track your consignment →</a>
+      </p>
+    </div>
+    <div style="background:#042C53;padding:12px 24px">
+      <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0">© 2026 The Card Cloud · thecardcloud.com</p>
+    </div>
+  </div>`;
+}
+
 // ── Trade emails ──────────────────────────────────────────────────────────────
 
 function tradeShell(bodyHtml: string, footerLine: string): string {

@@ -82,6 +82,13 @@ const GROUP_ORDER = [
 const HINTS     = new Map(SEED.map(s => [s.service, s.hint]));
 const AUTO_SVCS = new Set(SEED.filter(s => s.auto).map(s => s.service));
 
+// Canonical per-service order, so every page render shows the same field
+// order regardless of when each row landed in the DB (avoids local vs prod
+// layout drift when fields are added incrementally).
+const SEED_INDEX = new Map(SEED.map((s, i) => [s.service, i]));
+const SERVICE_ORDER = (a: { service: string }, b: { service: string }) =>
+  (SEED_INDEX.get(a.service) ?? 9999) - (SEED_INDEX.get(b.service) ?? 9999);
+
 export interface CredItem      { service: string; label: string; value: string; hint?: string; auto?: boolean }
 export interface GroupData     { name: string; items: CredItem[]; activeEnvGroup?: boolean }
 export interface EbayEnvStatus { connected: boolean; seller?: string; expiresAt?: string }
@@ -140,7 +147,7 @@ export default async function CredentialsPage({
 
   const groups: GroupData[] = ordered.map(name => ({
     name,
-    items: groupMap.get(name)!,
+    items: groupMap.get(name)!.sort(SERVICE_ORDER),
     activeEnvGroup: name === activeEbayGroup,
   }));
 

@@ -71,12 +71,16 @@ const SEED: { service: string; label: string; group: string; hint?: string; auto
   { service: "twilio_account_sid",  label: "Account SID",    group: "Twilio", hint: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" },
   { service: "twilio_auth_token",   label: "Auth Token",     group: "Twilio", hint: "From your Twilio Console dashboard" },
   { service: "twilio_from_number",  label: "From Number",    group: "Twilio", hint: "+1xxxxxxxxxx — your Twilio phone number" },
+  // Internal — auto-managed timestamps
+  { service: "ebay_message_last_check",  label: "eBay Message Last Check",  group: "Internal — Auto-managed", auto: true, hint: "Updated each time the eBay message monitor runs" },
+  { service: "ebay_feedback_last_check", label: "eBay Feedback Last Check", group: "Internal — Auto-managed", auto: true, hint: "Updated each time the eBay feedback monitor runs" },
 ];
 
 // Canonical group order — predefined groups appear in this order on the page
 const GROUP_ORDER = [
   "Email", "Payments", "Grading APIs", "Social Auth",
   "Marketplace — eBay", "eBay — Sandbox", "eBay — Production", "Storage", "AI / ML", "Twilio",
+  "Internal — Auto-managed",
 ];
 
 const HINTS     = new Map(SEED.map(s => [s.service, s.hint]));

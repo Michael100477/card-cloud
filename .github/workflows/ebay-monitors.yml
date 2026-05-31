@@ -1,0 +1,42 @@
+name: eBay monitors
+
+# Pings the production app's eBay monitor endpoints on a schedule. Replaces
+# the local card-cloud-ai pm2 process when running on Railway.
+#
+# Frequency mirrors the local cron:
+#   - messages every 5 minutes (GitHub may delay up to ~10 min under load)
+#   - feedback every 15 minutes
+#
+# Both endpoints require the `x-internal: ai-lab` header to authenticate
+# (set in app/api/admin/ebay/*/monitor/route.ts).
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'    # messages
+    - cron: '*/15 * * * *'   # feedback
+  workflow_dispatch:          # manual trigger from the Actions tab
+
+jobs:
+  messages:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/admin/ebay/messages/monitor
+        run: |
+          curl -fsS -X POST \
+            -H "x-internal: ai-lab" \
+            -H "Content-Type: application/json" \
+            --max-time 60 \
+            https://card-cloud-production.up.railway.app/api/admin/ebay/messages/monitor
+
+  feedback:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/admin/ebay/feedback/monitor
+        run: |
+          curl -fsS -X POST \
+            -H "x-internal: ai-lab" \
+            -H "Content-Type: application/json" \
+            --max-time 120 \
+            https://card-cloud-production.up.railway.app/api/admin/ebay/feedback/monitor

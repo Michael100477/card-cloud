@@ -59,16 +59,29 @@ export async function uploadPhotoToEbay(
   accessToken: string,
   isSandbox: boolean,
 ): Promise<string | null> {
-  const relative  = photoUrl.startsWith("/") ? photoUrl.slice(1) : photoUrl;
-  const filePath  = join(process.env.PROJECT_ROOT ?? process.cwd(), "public", relative);
-
   let imageBuffer: Buffer;
-  try {
-    imageBuffer = await readFile(filePath);
-  } catch {
-    console.warn(`[ebay] photo file not found: ${filePath}`);
-    logger.warn({ category: "ebay", action: "ebay.photo.file.missing", message: `Photo file not found on disk: ${filePath}` });
-    return null;
+  if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
+    // Remote URL (R2 in production, custom domain, etc.) — fetch the bytes.
+    try {
+      const r = await fetch(photoUrl);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      imageBuffer = Buffer.from(await r.arrayBuffer());
+    } catch (err) {
+      console.warn(`[ebay] photo fetch failed (${photoUrl}):`, err);
+      logger.warn({ category: "ebay", action: "ebay.photo.fetch.failed", message: `Could not fetch remote photo ${photoUrl}: ${err}` });
+      return null;
+    }
+  } else {
+    // Local-relative URL like /uploads/abc.jpg — read from public/.
+    const relative = photoUrl.startsWith("/") ? photoUrl.slice(1) : photoUrl;
+    const filePath = join(process.env.PROJECT_ROOT ?? process.cwd(), "public", relative);
+    try {
+      imageBuffer = await readFile(filePath);
+    } catch {
+      console.warn(`[ebay] photo file not found: ${filePath}`);
+      logger.warn({ category: "ebay", action: "ebay.photo.file.missing", message: `Photo file not found on disk: ${filePath}` });
+      return null;
+    }
   }
 
   const [appId, devId, certId] = await Promise.all([

@@ -610,12 +610,14 @@ function buildAspects(input: EbayListingInput): Record<string, string[]> {
     if (effectiveCert)   aspects["Certification Number"]   = [effectiveCert];
   }
 
-  aspects["Card Thickness"]               = [input.cardThickness ?? "35 pt."];
+  // `||` (not `??`) so empty strings from the form fall through to the
+  // default — eBay rejects empty aspect values with a 400.
+  aspects["Card Thickness"]               = [input.cardThickness     || "35 pt."];
   if (input.material) aspects["Material"] = [input.material];
-  aspects["Country/Region of Manufacture"]  = [input.countryOfOrigin ?? "United States"];
-  aspects["Language"]                       = [input.language ?? "English"];
+  aspects["Country/Region of Manufacture"]  = [input.countryOfOrigin || "United States"];
+  aspects["Language"]                       = [input.language         || "English"];
   aspects["Vintage"]                        = [input.vintage ? "Yes" : "No"];
-  aspects["Original/Licensed Reprint"]      = [input.originalOrLicensed ?? "Original"];
+  aspects["Original/Licensed Reprint"]      = [input.originalOrLicensed || "Original"];
   aspects["Customized"]                     = [input.customized ? "Yes" : "No"];
   // Run stored values through canonicalize* in case they're old short-form data
   // (e.g. "NFL" from before the dropdown labels were changed to the long form).

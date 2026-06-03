@@ -40,6 +40,29 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     getQuestionCounts(),
   ]);
 
+  // Auto-demote: any listing we have marked "active" that's no longer in
+  // eBay's live ActiveList has ended (either the auction ran out or the
+  // BIN expired). syncOrders covers SOLD listings; this catches the rest.
+  // Only runs when livePrices actually returned data — if eBay is down,
+  // we don't want to demote everything.
+  if (livePrices.size > 0) {
+    const liveIds = new Set(livePrices.keys());
+    const checkAndDemote = (l: { id: string; status: string; ebayListingId: string | null; soldPrice: unknown }) => (
+      l.status === "active" && l.ebayListingId && !liveIds.has(l.ebayListingId) && !l.soldPrice
+    );
+    const endedInternal = internalListings.filter(checkAndDemote).map(l => l.id);
+    const endedEbay     = listings.filter(checkAndDemote).map(l => l.id);
+    if (endedInternal.length || endedEbay.length) {
+      await Promise.all([
+        endedInternal.length ? db.internalListing.updateMany({ where: { id: { in: endedInternal } }, data: { status: "ended" } }) : null,
+        endedEbay.length     ? db.ebayListing.updateMany({ where: { id: { in: endedEbay } }, data: { status: "ended" } }) : null,
+      ]);
+      // Reflect the new status in the data we just queried so the page renders correctly
+      for (const l of internalListings) if (endedInternal.includes(l.id)) l.status = "ended";
+      for (const l of listings)         if (endedEbay.includes(l.id))     l.status = "ended";
+    }
+  }
+
   // Hide imports the admin hasn't actually saved yet — they belong in the
   // "Listed Directly on eBay" section until first save.
   const savedInternalListings = internalListings.filter(l =>

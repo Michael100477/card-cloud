@@ -34,8 +34,16 @@ export interface LivePrice {
   endTime:      string | null;  // ISO timestamp when eBay ends the listing
 }
 
-let cache: { at: number; data: Map<string, LivePrice> } | null = null;
+let cache: { at: number; data: Map<string, LivePrice>; sold: Set<string> } | null = null;
 const CACHE_TTL_MS = 60_000; // 1 minute — keeps page loads fast without burning eBay API calls
+
+/** Item IDs from eBay's SoldList — auctions that ended with a winner or BIN
+ *  that have been purchased. Used by the listings page to distinguish
+ *  "active → sold" from "active → ended (unsold)". */
+export async function getSoldItemIds(): Promise<Set<string>> {
+  await getLivePrices();
+  return cache?.sold ?? new Set<string>();
+}
 
 export async function getLivePrices(): Promise<Map<string, LivePrice>> {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.data;
@@ -67,7 +75,14 @@ export async function getLivePrices(): Promise<Map<string, LivePrice>> {
       <PageNumber>1</PageNumber>
     </Pagination>
   </ActiveList>
-  <SoldList><Include>false</Include></SoldList>
+  <SoldList>
+    <Include>true</Include>
+    <Pagination>
+      <EntriesPerPage>200</EntriesPerPage>
+      <PageNumber>1</PageNumber>
+    </Pagination>
+    <DurationInDays>60</DurationInDays>
+  </SoldList>
   <UnsoldList><Include>false</Include></UnsoldList>
 </GetMyeBaySellingRequest>`;
 
@@ -104,6 +119,16 @@ export async function getLivePrices(): Promise<Map<string, LivePrice>> {
     result.set(itemId, { currentPrice, bidCount, watchCount, endTime });
   }
 
-  cache = { at: Date.now(), data: result };
+  // SoldList — items that ended with a buyer in the last 60 days. Used by
+  // the listings page to distinguish "active → sold" from "active → ended".
+  const sold = new Set<string>();
+  const soldSection = text.match(/<SoldList>([\s\S]*?)<\/SoldList>/)?.[1] ?? "";
+  const soldItems = [...soldSection.matchAll(/<Item>([\s\S]*?)<\/Item>/g)].map(m => m[1]);
+  for (const block of soldItems) {
+    const itemId = attr(block, "ItemID");
+    if (itemId) sold.add(itemId);
+  }
+
+  cache = { at: Date.now(), data: result, sold };
   return result;
 }

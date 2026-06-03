@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getLivePrices } from "@/lib/ebay-live-prices";
+import { getLivePrices, getSoldItemIds } from "@/lib/ebay-live-prices";
 import { getQuestionCounts } from "@/lib/ebay-question-counts";
 import { syncOrdersThrottled } from "@/lib/ebay-sync-cache";
 import { ListingsClient } from "./ListingsClient";
@@ -40,26 +40,42 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     getQuestionCounts(),
   ]);
 
-  // Auto-demote: any listing we have marked "active" that's no longer in
-  // eBay's live ActiveList has ended (either the auction ran out or the
-  // BIN expired). syncOrders covers SOLD listings; this catches the rest.
-  // Only runs when livePrices actually returned data — if eBay is down,
-  // we don't want to demote everything.
+  // Reconcile active listings against eBay's live state on every page load.
+  // eBay returns three buckets for each listing: ActiveList (still live),
+  // SoldList (ended with a winner), and absent (ended without a winner).
+  // We promote active→sold for the second bucket and active→ended for the
+  // third. Skip if ActiveList is empty (eBay temp outage — don't nuke rows).
   if (livePrices.size > 0) {
     const liveIds = new Set(livePrices.keys());
-    const checkAndDemote = (l: { id: string; status: string; ebayListingId: string | null; soldPrice: unknown }) => (
-      l.status === "active" && l.ebayListingId && !liveIds.has(l.ebayListingId) && !l.soldPrice
-    );
-    const endedInternal = internalListings.filter(checkAndDemote).map(l => l.id);
-    const endedEbay     = listings.filter(checkAndDemote).map(l => l.id);
-    if (endedInternal.length || endedEbay.length) {
+    const soldIds = await getSoldItemIds();
+    type Row = { id: string; status: string; ebayListingId: string | null; soldPrice: unknown };
+    const classify = (l: Row): "sold" | "ended" | null => {
+      if (l.status !== "active" || !l.ebayListingId || l.soldPrice) return null;
+      if (liveIds.has(l.ebayListingId)) return null;
+      return soldIds.has(l.ebayListingId) ? "sold" : "ended";
+    };
+    const sortRow = (rows: Row[], to: "sold" | "ended") =>
+      rows.filter(l => classify(l) === to).map(l => l.id);
+    const endedInternal = sortRow(internalListings, "ended");
+    const soldInternal  = sortRow(internalListings, "sold");
+    const endedEbay     = sortRow(listings,         "ended");
+    const soldEbay      = sortRow(listings,         "sold");
+    if (endedInternal.length || soldInternal.length || endedEbay.length || soldEbay.length) {
       await Promise.all([
         endedInternal.length ? db.internalListing.updateMany({ where: { id: { in: endedInternal } }, data: { status: "ended" } }) : null,
-        endedEbay.length     ? db.ebayListing.updateMany({ where: { id: { in: endedEbay } }, data: { status: "ended" } }) : null,
+        soldInternal.length  ? db.internalListing.updateMany({ where: { id: { in: soldInternal  } }, data: { status: "sold"  } }) : null,
+        endedEbay.length     ? db.ebayListing.updateMany({     where: { id: { in: endedEbay     } }, data: { status: "ended" } }) : null,
+        soldEbay.length      ? db.ebayListing.updateMany({     where: { id: { in: soldEbay      } }, data: { status: "sold"  } }) : null,
       ]);
-      // Reflect the new status in the data we just queried so the page renders correctly
-      for (const l of internalListings) if (endedInternal.includes(l.id)) l.status = "ended";
-      for (const l of listings)         if (endedEbay.includes(l.id))     l.status = "ended";
+      // Mirror the updates into the in-memory rows so this page render reflects them.
+      for (const l of internalListings) {
+        if (endedInternal.includes(l.id)) l.status = "ended";
+        if (soldInternal.includes(l.id))  l.status = "sold";
+      }
+      for (const l of listings) {
+        if (endedEbay.includes(l.id)) l.status = "ended";
+        if (soldEbay.includes(l.id))  l.status = "sold";
+      }
     }
   }
 

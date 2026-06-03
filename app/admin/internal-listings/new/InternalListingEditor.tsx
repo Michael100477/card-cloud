@@ -346,7 +346,19 @@ export function InternalListingEditor({
         return;
       }
       const c = d.cardData;
-      // Auto-set graded toggle based on what AI detected
+
+      // Multi-card lot — auto-switch category to Trading Card Lots and skip
+      // single-card identification (player/year/etc. will be empty so the user
+      // can describe the lot as a whole).
+      if (c.isLot || (typeof c.cardCount === "number" && c.cardCount >= 2)) {
+        patchDraft({ categoryId: "183444" });   // Sports Trading Cards > Trading Card Lots
+        if (c.sport) setSport(c.sport);
+        if (c.set)   setSet(c.set);             // optional: useful if all cards are same set
+        setScanMsg(`✓ Detected a lot of ${c.cardCount ?? "multiple"} cards — category set to Trading Card Lots. Fill in the rest manually.`);
+        return;
+      }
+
+      // Single card — auto-fill all the per-card fields
       if (c.isGraded !== undefined) setGraded(!!c.isGraded);
       if (c.player)       setPlayer(c.player);
       if (c.year)         setYear(String(c.year));

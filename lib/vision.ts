@@ -17,7 +17,15 @@ import { claudeMessage } from "@/lib/claude";
 // ~1200 tokens, identical on every scan. Stays in system so it is cached
 // automatically by claudeMessage(). The user turn carries only the image.
 
-const LABEL_PROMPT = `This is a photo of a sports or trading card — it may be a graded card inside a protective slab, or a raw (ungraded) card.
+const LABEL_PROMPT = `This is a photo of a sports or trading card — it may be a graded card inside a protective slab, or a raw (ungraded) card. It MAY also be a photo containing MULTIPLE cards (a lot).
+
+FIRST AND MOST IMPORTANT: count the cards in the photo.
+- cardCount: integer count of distinct trading cards visible in the photo. If a single card is shown front and back (two photos of the same card), that's still cardCount=1. If you can see two or more clearly different cards (different players, different designs, or arranged as a group/stack/lot), set cardCount to that number. Cap at 50.
+- isLot: true if cardCount >= 2, false otherwise.
+
+If isLot is true, return the JSON with cardCount + isLot set, and leave the per-card identification fields (player, year, manufacturer, set, etc.) as null — the user will fill those in manually for a lot listing. You can still try to identify the SPORT and SET if all cards in the lot appear to be from the same set.
+
+Otherwise (cardCount === 1) proceed with the normal single-card extraction below.
 
 First determine: is this a GRADED card inside a slab, or a RAW (ungraded) card?
 - isGraded: true if the card is inside a grading slab (PSA, BGS, SGC, CGC, etc.), false if it is a raw card not in a slab
@@ -84,6 +92,8 @@ async function resizeForVision(imageBuffer: Buffer): Promise<{ data: string; med
 // ── Public interface ──────────────────────────────────────────────────────────
 
 export interface VisionResult {
+  cardCount?:      number;       // 1 for a single card, 2+ for a lot
+  isLot?:          boolean;      // true when cardCount >= 2
   isGraded:        boolean;
   certNumber:      string | null;
   grader:          string;

@@ -95,6 +95,10 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     watchCount:    l.ebayListingId ? (livePrices.get(l.ebayListingId)?.watchCount   ?? null) : null,
     endTime:       l.ebayListingId ? (livePrices.get(l.ebayListingId)?.endTime      ?? null) : null,
     questionCount: l.ebayListingId ? (questionCounts.get(l.ebayListingId)             ?? 0)  : 0,
+    trackingNumber:   l.trackingNumber,
+    shippedAt:        l.shippedAt?.toISOString() ?? null,
+    shippingLabelUrl: l.shippingLabelUrl,
+    buyerName:        l.buyerName,
   }));
 
   const serializedInternal = savedInternalListings.map(l => ({
@@ -119,6 +123,10 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     watchCount:    l.ebayListingId ? (livePrices.get(l.ebayListingId)?.watchCount   ?? null) : null,
     endTime:       l.ebayListingId ? (livePrices.get(l.ebayListingId)?.endTime      ?? null) : null,
     questionCount: l.ebayListingId ? (questionCounts.get(l.ebayListingId)             ?? 0)  : 0,
+    trackingNumber:   l.trackingNumber,
+    shippedAt:        l.shippedAt?.toISOString() ?? null,
+    shippingLabelUrl: l.shippingLabelUrl,
+    buyerName:        l.buyerName,
   }));
 
   return (

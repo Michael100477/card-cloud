@@ -40,6 +40,8 @@ interface Listing {
   grade: string | null; gradeCompany: string | null; ownerName: string;
   currentBid: number | null; bidCount: number | null; watchCount: number | null;
   endTime: string | null; questionCount: number;
+  trackingNumber: string | null; shippedAt: string | null;
+  shippingLabelUrl: string | null; buyerName: string | null;
 }
 
 interface InternalListing {
@@ -52,6 +54,8 @@ interface InternalListing {
   set: string | null; grade: string | null; gradeCompany: string | null;
   currentBid: number | null; bidCount: number | null; watchCount: number | null;
   endTime: string | null; questionCount: number;
+  trackingNumber: string | null; shippedAt: string | null;
+  shippingLabelUrl: string | null; buyerName: string | null;
 }
 
 interface DirectListing {
@@ -86,9 +90,10 @@ export function ListingsClient({
   const params = useSearchParams();
   const router = useRouter();
 
-  const [tab, setTab] = useState<"consignment" | "internal" | "waiting">(
+  const [tab, setTab] = useState<"consignment" | "internal" | "waiting" | "shipped">(
     params.get("tab") === "internal" ? "internal"
     : params.get("tab") === "waiting" ? "waiting"
+    : params.get("tab") === "shipped" ? "shipped"
     : "consignment"
   );
   const [listings,  setListings]  = useState(initialListings);
@@ -274,13 +279,18 @@ export function ListingsClient({
       {/* Tabs */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-          {(["consignment", "internal", "waiting"] as const).map(t => {
-            const label = t === "consignment" ? "Consignment" : t === "internal" ? "Internal" : "Waiting for payment";
+          {(["consignment", "internal", "waiting", "shipped"] as const).map(t => {
+            const label = t === "consignment" ? "Consignment"
+                        : t === "internal"    ? "Internal"
+                        : t === "waiting"     ? "Waiting for payment"
+                        : "Shipped";
             const waitingCount = [...listings, ...internal].filter(l => l.status === "sold").length;
+            const shippedCount = [...listings, ...internal].filter(l => l.status === "shipped").length;
+            const count = t === "waiting" ? waitingCount : t === "shipped" ? shippedCount : 0;
             return (
               <button key={t} onClick={() => setTab(t)}
                 className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === t ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
-                {label}{t === "waiting" && waitingCount > 0 ? ` (${waitingCount})` : ""}
+                {label}{count > 0 ? ` (${count})` : ""}
               </button>
             );
           })}
@@ -431,6 +441,77 @@ export function ListingsClient({
                           className="text-brand text-xs font-medium hover:underline">
                           Mark as paid
                         </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
+      {/* Shipped tab — listings whose status === "shipped". Mirrors the
+          shipping admin page's "Shipped" filter so all flavours of listing
+          (consignment + internal) appear together with tracking info. */}
+      {tab === "shipped" && (() => {
+        const shippedConsign  = listings.filter(l => l.status === "shipped");
+        const shippedInternal = internal.filter(l => l.status === "shipped");
+        const total = shippedConsign.length + shippedInternal.length;
+        if (total === 0) {
+          return (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+              <p className="text-navy font-semibold mb-2">No shipped items yet</p>
+              <p className="text-slate-400 text-sm">Listings appear here once you create a shipping label or mark them shipped on the <Link href="/admin/shipping" className="text-brand hover:underline">Shipping</Link> page.</p>
+            </div>
+          );
+        }
+        return (
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-5 py-3">Card</th>
+                  <th className="text-left px-5 py-3">Buyer</th>
+                  <th className="text-left px-5 py-3">Sale</th>
+                  <th className="text-left px-5 py-3">Shipping</th>
+                  <th className="px-5 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {[...shippedConsign.map(l => ({ ...l, kind: "consignment" as const })),
+                  ...shippedInternal.map(l => ({ ...l, kind: "internal"   as const }))]
+                  .sort((a, b) => (b.shippedAt ?? "").localeCompare(a.shippedAt ?? ""))
+                  .map((l, i) => (
+                    <tr key={`shipped-${l.kind}-${l.id}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                      <td className="px-5 py-3 align-top">
+                        <p className="text-navy font-medium">{l.player}</p>
+                        <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
+                        <p className="text-slate-500 text-xs mt-0.5 truncate max-w-sm">{l.title}</p>
+                        {l.ebayListingId && (
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            eBay #{l.ebayListingId}{" "}
+                            {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 align-top text-xs text-navy">{l.buyerName ?? "—"}</td>
+                      <td className="px-5 py-3 align-top">
+                        {l.soldPrice != null && <p className="text-navy font-medium text-xs">${usd(l.soldPrice)}</p>}
+                      </td>
+                      <td className="px-5 py-3 align-top text-xs">
+                        {l.shippedAt && <p className="text-green-700 font-semibold">Shipped {new Date(l.shippedAt).toLocaleDateString()}</p>}
+                        {l.trackingNumber && (
+                          <p className="text-slate-500 mt-0.5">Tracking: <span className="text-navy font-mono">{l.trackingNumber}</span></p>
+                        )}
+                        {!l.trackingNumber && <p className="text-slate-400 italic">No tracking #</p>}
+                      </td>
+                      <td className="px-5 py-3 align-top">
+                        {l.shippingLabelUrl && (
+                          <a href={l.shippingLabelUrl} target="_blank" rel="noopener noreferrer"
+                             className="text-brand text-xs hover:underline font-medium whitespace-nowrap">
+                            ↓ Print label
+                          </a>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -21,14 +21,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const formData = await req.formData();
-  const file     = formData.get("image") as File | null;
+  // Two input modes:
+  //  1. multipart/form-data with `image` file (direct upload from <input>)
+  //  2. JSON body with `photoUrl` (server fetches it — used when the photo
+  //     already lives on R2 and the browser can't cross-origin fetch it)
+  let buffer: Buffer;
+  const contentType = req.headers.get("content-type") ?? "";
 
-  if (!file)                           return NextResponse.json({ error: "No image provided." },           { status: 400 });
-  if (!file.type.startsWith("image/")) return NextResponse.json({ error: "File must be an image." },       { status: 400 });
-  if (file.size > 20 * 1024 * 1024)   return NextResponse.json({ error: "Image must be under 20 MB." }, { status: 400 });
-
-  const buffer = Buffer.from(await file.arrayBuffer());
+  if (contentType.includes("application/json")) {
+    const { photoUrl } = await req.json();
+    if (!photoUrl || typeof photoUrl !== "string") return NextResponse.json({ error: "photoUrl required." }, { status: 400 });
+    try {
+      const r = await fetch(photoUrl);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      buffer = Buffer.from(await r.arrayBuffer());
+    } catch (err) {
+      return NextResponse.json({ error: `Could not fetch photo: ${String(err)}` }, { status: 400 });
+    }
+    if (buffer.length > 20 * 1024 * 1024) return NextResponse.json({ error: "Image must be under 20 MB." }, { status: 400 });
+  } else {
+    const formData = await req.formData();
+    const file     = formData.get("image") as File | null;
+    if (!file)                           return NextResponse.json({ error: "No image provided." },           { status: 400 });
+    if (!file.type.startsWith("image/")) return NextResponse.json({ error: "File must be an image." },       { status: 400 });
+    if (file.size > 20 * 1024 * 1024)   return NextResponse.json({ error: "Image must be under 20 MB." }, { status: 400 });
+    buffer = Buffer.from(await file.arrayBuffer());
+  }
 
   // ── Path 1: Claude Vision (primary) ──────────────────────────────────────
   let visionLabel: Awaited<ReturnType<typeof readLabelWithVision>> | null = null;

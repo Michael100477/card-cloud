@@ -323,12 +323,23 @@ export function InternalListingEditor({
     setScanning(true);
     setScanMsg("Reading label with AI…");
     try {
-      // Fetch the image from the local URL and send to /api/scan
-      const imgRes  = await fetch(photoUrl);
-      const blob    = await imgRes.blob();
-      const fd      = new FormData();
-      fd.append("image", blob, "slab.jpg");
-      const r  = await fetch("/api/scan", { method: "POST", body: fd });
+      // For remote URLs (R2, custom domain), have the server fetch the image
+      // — browsers can't cross-origin fetch from R2 without CORS configured.
+      // For local /uploads/ URLs, fall through to the FormData path.
+      let r: Response;
+      if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
+        r = await fetch("/api/scan", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ photoUrl }),
+        });
+      } else {
+        const imgRes = await fetch(photoUrl);
+        const blob   = await imgRes.blob();
+        const fd     = new FormData();
+        fd.append("image", blob, "slab.jpg");
+        r = await fetch("/api/scan", { method: "POST", body: fd });
+      }
       const d  = await r.json();
       if (!r.ok || !d.success) {
         setScanMsg(d.error ?? "Could not read label — fill in manually.");

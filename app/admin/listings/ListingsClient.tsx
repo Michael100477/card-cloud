@@ -177,7 +177,9 @@ export function ListingsClient({
   const [importError,    setImportError]    = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (tab !== "internal" || directListings !== null || directLoading) return;
+    // Load direct-on-eBay listings on mount (was: only on Internal tab open)
+    // so they're searchable from the global search box too.
+    if (directListings !== null || directLoading) return;
     setDirectLoading(true);
     setDirectError(null);
     fetch("/api/admin/ebay/direct-listings")
@@ -188,7 +190,7 @@ export function ListingsClient({
       })
       .catch(e => setDirectError(String(e)))
       .finally(() => setDirectLoading(false));
-  }, [tab, directListings, directLoading]);
+  }, [directListings, directLoading]);
 
   async function toggleDetail(ebayItemId: string) {
     if (expandedItem === ebayItemId) { setExpandedItem(null); return; }
@@ -368,7 +370,8 @@ export function ListingsClient({
         />
       </div>
 
-      {/* Search results — replaces every tab body when search is non-empty. */}
+      {/* Search results — replaces every tab body when search is non-empty.
+          Covers consignment, internal, and direct-on-eBay listings. */}
       {search.trim() && (() => {
         const q = search.trim().toLowerCase();
         const match = (l: { title?: string | null; player?: string; ebayListingId?: string | null; buyerName?: string | null }) =>
@@ -376,9 +379,26 @@ export function ListingsClient({
           || (l.player         ?? "").toLowerCase().includes(q)
           || (l.ebayListingId  ?? "").toLowerCase().includes(q)
           || (l.buyerName      ?? "").toLowerCase().includes(q);
+        const matchDirect = (l: DirectListing) =>
+          (l.title       ?? "").toLowerCase().includes(q)
+          || (l.ebayItemId ?? "").toLowerCase().includes(q);
         const hits = [
           ...listings.filter(match).map(l => ({ ...l, kind: "consignment" as const })),
           ...internal.filter(match).map(l => ({ ...l, kind: "internal" as const, scheduledTime: l.scheduledTime })),
+          ...(directListings ?? []).filter(matchDirect).map(l => ({
+            id:            l.ebayItemId,
+            title:         l.title,
+            ebayListingId: l.ebayItemId,
+            url:           l.url,
+            startPrice:    l.startPrice,
+            soldPrice:     null as number | null,
+            buyItNowPrice: l.binPrice,
+            status:        "active",
+            buyerName:     null as string | null,
+            listedAt:      l.startTime,
+            orderId:       "",
+            kind:          "direct" as const,
+          })),
         ].sort((a, b) => (b.listedAt ?? "").localeCompare(a.listedAt ?? ""));
         if (hits.length === 0) {
           return (
@@ -425,10 +445,16 @@ export function ListingsClient({
                         <Link href={`/admin/internal-listings/${l.id}`} className="text-brand text-xs hover:underline font-medium">
                           Open
                         </Link>
-                      ) : (
+                      ) : l.kind === "consignment" ? (
                         <Link href={`/admin/consignments/${(l as Listing).orderId}`} className="text-brand text-xs hover:underline font-medium">
                           Open order
                         </Link>
+                      ) : l.url ? (
+                        <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand text-xs hover:underline font-medium">
+                          View on eBay →
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 text-xs italic">eBay direct</span>
                       )}
                     </td>
                   </tr>

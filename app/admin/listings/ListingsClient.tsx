@@ -708,9 +708,7 @@ export function ListingsClient({
                   {internalActive.map((l, i) => (
                     <tr key={l.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                       <td className="px-5 py-3">
-                        <p className="text-navy font-medium">{l.player}</p>
-                        <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
-                        <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title || <span className="italic">Draft</span>}</p>
+                        <p className="text-navy font-medium break-words">{l.title || <span className="italic">Draft</span>}</p>
                         {l.ebayListingId && (
                           <p className="text-slate-400 text-xs mt-0.5">
                             eBay #{l.ebayListingId}{" "}

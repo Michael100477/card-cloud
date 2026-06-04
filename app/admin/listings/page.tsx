@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getLivePrices, getSoldItemIds } from "@/lib/ebay-live-prices";
+import { getLivePrices, getSoldPrices } from "@/lib/ebay-live-prices";
 import { getQuestionCounts } from "@/lib/ebay-question-counts";
 import { syncOrdersThrottled } from "@/lib/ebay-sync-cache";
 import { ListingsClient } from "./ListingsClient";
@@ -46,35 +46,42 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
   // We promote active→sold for the second bucket and active→ended for the
   // third. Skip if ActiveList is empty (eBay temp outage — don't nuke rows).
   if (livePrices.size > 0) {
-    const liveIds = new Set(livePrices.keys());
-    const soldIds = await getSoldItemIds();
+    const liveIds    = new Set(livePrices.keys());
+    const soldPrices = await getSoldPrices();
     type Row = { id: string; status: string; ebayListingId: string | null; soldPrice: unknown };
     const classify = (l: Row): "sold" | "ended" | null => {
       if (l.status !== "active" || !l.ebayListingId || l.soldPrice) return null;
       if (liveIds.has(l.ebayListingId)) return null;
-      return soldIds.has(l.ebayListingId) ? "sold" : "ended";
+      return soldPrices.has(l.ebayListingId) ? "sold" : "ended";
     };
-    const sortRow = (rows: Row[], to: "sold" | "ended") =>
-      rows.filter(l => classify(l) === to).map(l => l.id);
-    const endedInternal = sortRow(internalListings, "ended");
-    const soldInternal  = sortRow(internalListings, "sold");
-    const endedEbay     = sortRow(listings,         "ended");
-    const soldEbay      = sortRow(listings,         "sold");
-    if (endedInternal.length || soldInternal.length || endedEbay.length || soldEbay.length) {
-      await Promise.all([
-        endedInternal.length ? db.internalListing.updateMany({ where: { id: { in: endedInternal } }, data: { status: "ended" } }) : null,
-        soldInternal.length  ? db.internalListing.updateMany({ where: { id: { in: soldInternal  } }, data: { status: "sold"  } }) : null,
-        endedEbay.length     ? db.ebayListing.updateMany({     where: { id: { in: endedEbay     } }, data: { status: "ended" } }) : null,
-        soldEbay.length      ? db.ebayListing.updateMany({     where: { id: { in: soldEbay      } }, data: { status: "sold"  } }) : null,
-      ]);
+    const endedInternal = internalListings.filter(l => classify(l) === "ended");
+    const soldInternal  = internalListings.filter(l => classify(l) === "sold");
+    const endedEbay     = listings.filter(l => classify(l) === "ended");
+    const soldEbay      = listings.filter(l => classify(l) === "sold");
+    const ops: Promise<unknown>[] = [];
+    if (endedInternal.length) ops.push(db.internalListing.updateMany({ where: { id: { in: endedInternal.map(l => l.id) } }, data: { status: "ended" } }));
+    if (endedEbay.length)     ops.push(db.ebayListing.updateMany({     where: { id: { in: endedEbay.map(l => l.id)     } }, data: { status: "ended" } }));
+    // Each sold listing gets its own update because each carries a different price.
+    for (const l of soldInternal) {
+      const price = soldPrices.get(l.ebayListingId!);
+      ops.push(db.internalListing.update({ where: { id: l.id }, data: { status: "sold", soldPrice: price ?? undefined } }));
+    }
+    for (const l of soldEbay) {
+      const price = soldPrices.get(l.ebayListingId!);
+      ops.push(db.ebayListing.update({ where: { id: l.id }, data: { status: "sold", soldPrice: price ?? undefined } }));
+    }
+    if (ops.length) {
+      await Promise.all(ops);
       // Mirror the updates into the in-memory rows so this page render reflects them.
       for (const l of internalListings) {
-        if (endedInternal.includes(l.id)) l.status = "ended";
-        if (soldInternal.includes(l.id))  l.status = "sold";
+        if (endedInternal.find(x => x.id === l.id)) l.status = "ended";
+        const sold = soldInternal.find(x => x.id === l.id);
+        if (sold) { l.status = "sold"; l.soldPrice = soldPrices.get(l.ebayListingId!) as never ?? l.soldPrice; }
       }
       for (const l of listings) {
-        if (endedEbay.includes(l.id)) l.status = "ended";
-        if (soldEbay.includes(l.id))  l.status = "sold";
+        if (endedEbay.find(x => x.id === l.id)) l.status = "ended";
+        const sold = soldEbay.find(x => x.id === l.id);
+        if (sold) { l.status = "sold"; l.soldPrice = soldPrices.get(l.ebayListingId!) as never ?? l.soldPrice; }
       }
     }
   }

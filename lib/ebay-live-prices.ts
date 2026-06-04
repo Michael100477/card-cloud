@@ -34,15 +34,21 @@ export interface LivePrice {
   endTime:      string | null;  // ISO timestamp when eBay ends the listing
 }
 
-let cache: { at: number; data: Map<string, LivePrice>; sold: Set<string> } | null = null;
+let cache: { at: number; data: Map<string, LivePrice>; sold: Map<string, number> } | null = null;
 const CACHE_TTL_MS = 60_000; // 1 minute — keeps page loads fast without burning eBay API calls
 
-/** Item IDs from eBay's SoldList — auctions that ended with a winner or BIN
- *  that have been purchased. Used by the listings page to distinguish
- *  "active → sold" from "active → ended (unsold)". */
+/** Item IDs from eBay's SoldList → final sale price. Used by the listings
+ *  page to distinguish "active → sold" from "active → ended (unsold)" and
+ *  to capture the actual price the auction ended at (which our local
+ *  syncOrders only writes once an order is fully created). */
 export async function getSoldItemIds(): Promise<Set<string>> {
   await getLivePrices();
-  return cache?.sold ?? new Set<string>();
+  return new Set(cache?.sold.keys() ?? []);
+}
+
+export async function getSoldPrices(): Promise<Map<string, number>> {
+  await getLivePrices();
+  return cache?.sold ?? new Map<string, number>();
 }
 
 export async function getLivePrices(): Promise<Map<string, LivePrice>> {
@@ -119,14 +125,19 @@ export async function getLivePrices(): Promise<Map<string, LivePrice>> {
     result.set(itemId, { currentPrice, bidCount, watchCount, endTime });
   }
 
-  // SoldList — items that ended with a buyer in the last 60 days. Used by
-  // the listings page to distinguish "active → sold" from "active → ended".
-  const sold = new Set<string>();
+  // SoldList — items that ended with a buyer in the last 60 days. Map
+  // each itemId to its final sale price so we can patch it onto our DB
+  // rows when promoting active → sold.
+  const sold = new Map<string, number>();
   const soldSection = text.match(/<SoldList>([\s\S]*?)<\/SoldList>/)?.[1] ?? "";
   const soldItems = [...soldSection.matchAll(/<Item>([\s\S]*?)<\/Item>/g)].map(m => m[1]);
   for (const block of soldItems) {
     const itemId = attr(block, "ItemID");
-    if (itemId) sold.add(itemId);
+    if (!itemId) continue;
+    // eBay reports the final price under CurrentPrice for ended auctions or
+    // BuyItNowPrice for BIN sales. Fall back through both.
+    const price = parseFloat(attr(block, "CurrentPrice") ?? attr(block, "BuyItNowPrice") ?? "0") || 0;
+    sold.set(itemId, price);
   }
 
   cache = { at: Date.now(), data: result, sold };

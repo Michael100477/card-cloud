@@ -795,9 +795,10 @@ export function ListingsClient({
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                     <tr>
-                      <th className="text-left px-5 py-3">Title</th>
+                      <th className="text-left px-5 py-3">Card</th>
                       <th className="text-left px-5 py-3">Price</th>
-                      <th className="text-left px-5 py-3">Ends</th>
+                      <th className="text-left px-5 py-3">Status</th>
+                      <th className="text-left px-5 py-3">Listed</th>
                       <th className="px-5 py-3" />
                     </tr>
                   </thead>
@@ -827,10 +828,16 @@ export function ListingsClient({
                                 <p className="text-amber-700 text-xs mt-0.5" title="Buyer questions in last 30 days">💬 {l.questionCount} question{l.questionCount === 1 ? "" : "s"}</p>
                               )}
                             </td>
+                            <td className="px-5 py-3">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE.active}`}>active</span>
+                            </td>
                             <td className="px-5 py-3 text-slate-400 text-xs">
-                              {endLabel(l.endTime) ?? "—"}
+                              {l.startTime ? new Date(l.startTime).toLocaleDateString() : "—"}
                               {timeLeft(l.endTime, now) && (
-                                <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                                <>
+                                  <p className="text-navy text-xs mt-0.5">{timeLeft(l.endTime, now)}</p>
+                                  <p className="text-slate-500 text-xs">ends {endLabel(l.endTime)}</p>
+                                </>
                               )}
                             </td>
                             <td className="px-5 py-3">
@@ -859,7 +866,7 @@ export function ListingsClient({
                           </tr>
                           {isExpanded && (
                             <tr key={`${l.ebayItemId}-detail`} className="bg-slate-50/80 border-t border-slate-100">
-                              <td colSpan={4} className="px-5 py-5">
+                              <td colSpan={5} className="px-5 py-5">
                                 {detailError[l.ebayItemId] ? (
                                   <p className="text-red-500 text-sm">{detailError[l.ebayItemId]}</p>
                                 ) : !detail ? (

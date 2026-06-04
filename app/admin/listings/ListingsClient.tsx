@@ -123,13 +123,17 @@ export function ListingsClient({
   const params = useSearchParams();
   const router = useRouter();
 
-  const [tab, setTab] = useState<"consignment" | "internal" | "waiting" | "paid" | "shipped">(
-    params.get("tab") === "internal" ? "internal"
+  const [tab, setTab] = useState<"consignment" | "internal" | "scheduled" | "waiting" | "paid" | "shipped">(
+    params.get("tab") === "internal"  ? "internal"
+    : params.get("tab") === "scheduled" ? "scheduled"
     : params.get("tab") === "waiting" ? "waiting"
     : params.get("tab") === "paid"    ? "paid"
     : params.get("tab") === "shipped" ? "shipped"
     : "consignment"
   );
+  // Global search — when non-empty, overrides the tab view and shows
+  // every listing that matches across both consignment + internal sets.
+  const [search, setSearch] = useState("");
   const [listings,  setListings]  = useState(initialListings);
   const [internal,  setInternal]  = useState(initialInternal);
   const [deleting,  setDeleting]  = useState<string | null>(null);
@@ -321,18 +325,21 @@ export function ListingsClient({
       {/* Tabs */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
-          {(["consignment", "internal", "waiting", "paid", "shipped"] as const).map(t => {
+          {(["consignment", "internal", "scheduled", "waiting", "paid", "shipped"] as const).map(t => {
             const label = t === "consignment" ? "Consignment"
                         : t === "internal"    ? "Internal"
+                        : t === "scheduled"   ? "Scheduled"
                         : t === "waiting"     ? "Waiting for payment"
                         : t === "paid"        ? "Waiting to be Shipped"
                         : "Shipped";
-            const waitingCount = [...listings, ...internal].filter(l => l.status === "sold").length;
-            const paidCount    = [...listings, ...internal].filter(l => l.status === "paid").length;
-            const shippedCount = [...listings, ...internal].filter(l => l.status === "shipped").length;
-            const count = t === "waiting" ? waitingCount
-                        : t === "paid"    ? paidCount
-                        : t === "shipped" ? shippedCount : 0;
+            const scheduledCount = [...listings, ...internal].filter(l => l.status === "scheduled").length;
+            const waitingCount   = [...listings, ...internal].filter(l => l.status === "sold").length;
+            const paidCount      = [...listings, ...internal].filter(l => l.status === "paid").length;
+            const shippedCount   = [...listings, ...internal].filter(l => l.status === "shipped").length;
+            const count = t === "scheduled" ? scheduledCount
+                        : t === "waiting"   ? waitingCount
+                        : t === "paid"      ? paidCount
+                        : t === "shipped"   ? shippedCount : 0;
             return (
               <button key={t} onClick={() => setTab(t)}
                 className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === t ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
@@ -349,8 +356,91 @@ export function ListingsClient({
         )}
       </div>
 
+      {/* Global search — when filled, overrides the tab view with a single
+          unified list of matching listings across both consignment + internal. */}
+      <div className="relative">
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search all listings by title, player, eBay #, buyer…"
+          className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand bg-white"
+        />
+      </div>
+
+      {/* Search results — replaces every tab body when search is non-empty. */}
+      {search.trim() && (() => {
+        const q = search.trim().toLowerCase();
+        const match = (l: { title?: string | null; player?: string; ebayListingId?: string | null; buyerName?: string | null }) =>
+          (l.title           ?? "").toLowerCase().includes(q)
+          || (l.player         ?? "").toLowerCase().includes(q)
+          || (l.ebayListingId  ?? "").toLowerCase().includes(q)
+          || (l.buyerName      ?? "").toLowerCase().includes(q);
+        const hits = [
+          ...listings.filter(match).map(l => ({ ...l, kind: "consignment" as const })),
+          ...internal.filter(match).map(l => ({ ...l, kind: "internal" as const, scheduledTime: l.scheduledTime })),
+        ].sort((a, b) => (b.listedAt ?? "").localeCompare(a.listedAt ?? ""));
+        if (hits.length === 0) {
+          return (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+              <p className="text-slate-400 text-sm">No listings match <span className="font-mono text-navy">{search}</span>.</p>
+            </div>
+          );
+        }
+        return (
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
+            <table className="w-full text-sm table-fixed">
+              {FIVE_COL_GROUP}
+              <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-5 py-3">Card</th>
+                  <th className="text-left px-5 py-3">Price</th>
+                  <th className="text-left px-5 py-3">Status</th>
+                  <th className="text-left px-5 py-3">Buyer</th>
+                  <th className="px-5 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {hits.map((l, i) => (
+                  <tr key={`search-${l.kind}-${l.id}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                    <td className="px-5 py-3">
+                      <p className="text-navy font-medium break-words">{l.title || <span className="italic">Draft</span>}</p>
+                      {l.ebayListingId && (
+                        <p className="text-slate-400 text-xs mt-0.5">
+                          eBay #{l.ebayListingId}{" "}
+                          {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-5 py-3">
+                      <p className="text-navy font-medium text-xs">{l.soldPrice != null ? `Sold $${usd(l.soldPrice)}` : `$${usd(l.startPrice)} start`}</p>
+                      {l.buyItNowPrice && !l.soldPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[l.status] ?? "bg-slate-100 text-slate-500"}`}>{l.status}</span>
+                    </td>
+                    <td className="px-5 py-3 text-xs text-navy break-words">{l.buyerName ?? <span className="text-slate-400 italic">—</span>}</td>
+                    <td className="px-5 py-3">
+                      {l.kind === "internal" ? (
+                        <Link href={`/admin/internal-listings/${l.id}`} className="text-brand text-xs hover:underline font-medium">
+                          Open
+                        </Link>
+                      ) : (
+                        <Link href={`/admin/consignments/${(l as Listing).orderId}`} className="text-brand text-xs hover:underline font-medium">
+                          Open order
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
       {/* Consignment tab */}
-      {tab === "consignment" && (
+      {!search.trim() && tab === "consignment" && (
         listings.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
             <p className="text-slate-400 text-sm">No consignment listings yet. Open a received consignment order and generate a listing on any item.</p>
@@ -440,8 +530,80 @@ export function ListingsClient({
         )
       )}
 
+      {/* Scheduled tab — listings whose status is "scheduled" (queued for
+          eBay to flip live at scheduledTime). They auto-promote to "active"
+          when scheduledTime passes — see page.tsx. */}
+      {!search.trim() && tab === "scheduled" && (() => {
+        const scheduledConsign  = listings.filter(l => l.status === "scheduled");
+        const scheduledInternal = internal.filter(l => l.status === "scheduled");
+        const total = scheduledConsign.length + scheduledInternal.length;
+        if (total === 0) {
+          return (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+              <p className="text-navy font-semibold mb-2">Nothing scheduled</p>
+              <p className="text-slate-400 text-sm">Listings with a future start time live here until they go active on eBay.</p>
+            </div>
+          );
+        }
+        return (
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
+            <table className="w-full text-sm table-fixed">
+              {FIVE_COL_GROUP}
+              <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-5 py-3">Card</th>
+                  <th className="text-left px-5 py-3">Price</th>
+                  <th className="text-left px-5 py-3">Status</th>
+                  <th className="text-left px-5 py-3">Starts</th>
+                  <th className="px-5 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {[...scheduledConsign.map(l => ({ ...l, kind: "consignment" as const, scheduledTime: null as string | null })),
+                  ...scheduledInternal.map(l => ({ ...l, kind: "internal"   as const }))]
+                  .sort((a, b) => (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""))
+                  .map((l, i) => (
+                    <tr key={`sched-${l.kind}-${l.id}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                      <td className="px-5 py-3">
+                        <p className="text-navy font-medium break-words">{l.title || <span className="italic">Draft</span>}</p>
+                        {l.ebayListingId && (
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            eBay #{l.ebayListingId}{" "}
+                            {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
+                        {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE.scheduled}`}>scheduled</span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-400 text-xs">
+                        {l.scheduledTime ? new Date(l.scheduledTime).toLocaleString() : "—"}
+                      </td>
+                      <td className="px-5 py-3">
+                        {l.kind === "internal" ? (
+                          <Link href={`/admin/internal-listings/${l.id}`} className="text-brand text-xs hover:underline font-medium">
+                            Edit listing
+                          </Link>
+                        ) : (
+                          <Link href={`/admin/consignments/${(l as Listing).orderId}`} className="text-brand text-xs hover:underline font-medium">
+                            View order
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
       {/* Waiting for payment tab — sold but not yet paid (waiting for buyer to pay) */}
-      {tab === "waiting" && (() => {
+      {!search.trim() && tab === "waiting" && (() => {
         const waitingConsign  = listings.filter(l => l.status === "sold");
         const waitingInternal = internal.filter(l => l.status === "sold");
         const total = waitingConsign.length + waitingInternal.length;
@@ -511,7 +673,7 @@ export function ListingsClient({
 
       {/* Waiting to be Shipped — paid but not yet shipped. Mirrors the
           "Ready to ship" filter on the Shipping admin page. */}
-      {tab === "paid" && (() => {
+      {!search.trim() && tab === "paid" && (() => {
         const paidConsign  = listings.filter(l => l.status === "paid");
         const paidInternal = internal.filter(l => l.status === "paid");
         const total = paidConsign.length + paidInternal.length;
@@ -586,7 +748,7 @@ export function ListingsClient({
       {/* Shipped tab — listings whose status === "shipped". Mirrors the
           shipping admin page's "Shipped" filter so all flavours of listing
           (consignment + internal) appear together with tracking info. */}
-      {tab === "shipped" && (() => {
+      {!search.trim() && tab === "shipped" && (() => {
         const shippedConsign  = listings.filter(l => l.status === "shipped");
         const shippedInternal = internal.filter(l => l.status === "shipped");
         const total = shippedConsign.length + shippedInternal.length;
@@ -676,10 +838,10 @@ export function ListingsClient({
       })()}
 
       {/* Internal tab — site-created listings */}
-      {tab === "internal" && (() => {
+      {!search.trim() && tab === "internal" && (() => {
         // Show only in-flight listings here. Once a listing flips to
         // sold / paid / shipped / ended it lives in its dedicated tab.
-        const internalActive = internal.filter(l => ["draft", "scheduled", "active"].includes(l.status));
+        const internalActive = internal.filter(l => ["draft", "active"].includes(l.status));
         return (
         <>
           {internalActive.length === 0 ? (
@@ -943,4 +1105,5 @@ export function ListingsClient({
     </div>
   );
 }
+
 

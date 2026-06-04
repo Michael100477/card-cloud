@@ -84,7 +84,7 @@ export function ChangelogClient() {
       {entries.map(entry => {
         const open = expanded === entry.date;
         return (
-          <div key={entry.date} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div key={entry.date} className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
             {/* Header */}
             <button
               onClick={() => setExpanded(open ? null : entry.date)}

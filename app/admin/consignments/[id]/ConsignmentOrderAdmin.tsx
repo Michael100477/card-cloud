@@ -903,7 +903,7 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
             {receivedItems.map(item => {
               const draft = drafts[item.id] ?? emptyDraft();
               return (
-                <div key={item.id} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+                <div key={item.id} className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
                   {/* Card row */}
                   <div className="flex items-start justify-between gap-3 p-5">
                     <div className="min-w-0">

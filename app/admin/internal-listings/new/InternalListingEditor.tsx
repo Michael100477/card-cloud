@@ -734,7 +734,7 @@ export function InternalListingEditor({
       </div>
 
       {/* Card + Listing form — same card, same inline flow as consignment */}
-      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
       <div className="p-6 flex flex-col gap-4">
         <h2 className="text-navy font-semibold">Card Details</h2>
 

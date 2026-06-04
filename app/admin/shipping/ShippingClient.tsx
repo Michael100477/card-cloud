@@ -90,7 +90,7 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
           </p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
               <tr>

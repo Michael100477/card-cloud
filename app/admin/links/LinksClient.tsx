@@ -241,7 +241,7 @@ export function LinksClient({ initialLinks, sitePages, sectionOrder }: Props) {
       {/* Sections */}
       <div className="flex flex-col gap-6">
         {allSections.map(section => (
-          <div key={section} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div key={section} className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
             <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100">
               <h2 className="text-navy font-semibold text-sm">{section}</h2>
             </div>

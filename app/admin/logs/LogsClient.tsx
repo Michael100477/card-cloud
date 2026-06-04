@@ -133,7 +133,7 @@ export function LogsClient() {
       </div>
 
       {/* Log table */}
-      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
         {loading && logs.length === 0 ? (
           <div className="px-6 py-10 text-center text-slate-400 text-sm">Loading…</div>
         ) : logs.length === 0 ? (

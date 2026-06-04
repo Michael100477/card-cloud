@@ -343,7 +343,7 @@ export function ListingsClient({
             <p className="text-slate-400 text-sm">No consignment listings yet. Open a received consignment order and generate a listing on any item.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
@@ -441,7 +441,7 @@ export function ListingsClient({
           );
         }
         return (
-          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
@@ -511,7 +511,7 @@ export function ListingsClient({
           );
         }
         return (
-          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
@@ -586,7 +586,7 @@ export function ListingsClient({
           );
         }
         return (
-          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
@@ -679,7 +679,7 @@ export function ListingsClient({
               </Link>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                   <tr>
@@ -791,7 +791,7 @@ export function ListingsClient({
                 <p className="text-slate-400 text-sm">No listings found that were created directly on eBay.</p>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                     <tr>

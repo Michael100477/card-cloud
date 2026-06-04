@@ -44,7 +44,7 @@ export default async function AdminOverviewPage() {
       </div>
 
       {/* Recent signups */}
-      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-navy font-semibold">Recent signups</h2>
           <Link href="/admin/users" className="text-brand text-sm hover:underline">View all →</Link>

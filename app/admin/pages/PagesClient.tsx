@@ -83,7 +83,7 @@ export function PagesClient({ initialPages }: { initialPages: SitePage[] }) {
       </p>
 
       {/* Page list */}
-      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden mb-6">
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto mb-6">
         <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100 grid grid-cols-[1fr_1fr_auto] gap-4">
           <span className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Label</span>
           <span className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Path</span>

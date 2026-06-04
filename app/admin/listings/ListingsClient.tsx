@@ -306,7 +306,7 @@ export function ListingsClient({
   return (
     <div className="flex flex-col gap-4">
       {/* Tabs */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
           {(["consignment", "internal", "waiting", "paid", "shipped"] as const).map(t => {
             const label = t === "consignment" ? "Consignment"
@@ -344,7 +344,7 @@ export function ListingsClient({
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left px-5 py-3">Card</th>
@@ -442,7 +442,7 @@ export function ListingsClient({
         }
         return (
           <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left px-5 py-3">Card</th>
@@ -512,7 +512,7 @@ export function ListingsClient({
         }
         return (
           <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left px-5 py-3">Card</th>
@@ -587,7 +587,7 @@ export function ListingsClient({
         }
         return (
           <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left px-5 py-3">Card</th>
@@ -680,7 +680,7 @@ export function ListingsClient({
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                   <tr>
                     <th className="text-left px-5 py-3">Card</th>
@@ -792,7 +792,7 @@ export function ListingsClient({
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[720px]">
                   <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                     <tr>
                       <th className="text-left px-5 py-3">Title</th>
@@ -923,3 +923,4 @@ export function ListingsClient({
     </div>
   );
 }
+

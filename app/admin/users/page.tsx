@@ -123,7 +123,7 @@ export default function AdminUsersPage() {
       )}
 
       <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[720px]">
           <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
             <tr>
               <th className="text-left px-5 py-3">User</th>
@@ -196,3 +196,4 @@ export default function AdminUsersPage() {
     </div>
   );
 }
+

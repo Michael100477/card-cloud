@@ -8,6 +8,19 @@ import { MessageBuyerModal } from "./MessageBuyerModal";
 // US dollar formatter — always two decimals (so $17.5 displays as $17.50).
 const usd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Shared column widths for the Internal listings table and the Direct-on-
+// eBay table so the two tables line up visually across the page boundary.
+// Total = 100%; tweaks should keep them summing to 100.
+const FIVE_COL_GROUP = (
+  <colgroup>
+    <col style={{ width: "38%" }} />
+    <col style={{ width: "18%" }} />
+    <col style={{ width: "12%" }} />
+    <col style={{ width: "16%" }} />
+    <col style={{ width: "16%" }} />
+  </colgroup>
+);
+
 // Compact "how long until X" string, e.g. "5d 2h left", "47m left", "ending soon", "ended".
 // Pass `now` so all rows render against the same client-ticked clock — see the
 // `now` useState in ListingsClient that bumps every 30s.
@@ -680,7 +693,8 @@ export function ListingsClient({
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
+                {FIVE_COL_GROUP}
                 <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                   <tr>
                     <th className="text-left px-5 py-3">Card</th>
@@ -792,7 +806,8 @@ export function ListingsClient({
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm table-fixed">
+                  {FIVE_COL_GROUP}
                   <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                     <tr>
                       <th className="text-left px-5 py-3">Card</th>

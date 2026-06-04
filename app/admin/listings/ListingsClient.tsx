@@ -361,7 +361,7 @@ export function ListingsClient({
                     <td className="px-5 py-3">
                       <p className="text-navy font-medium">{l.player}</p>
                       <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
-                      <p className="text-slate-500 text-xs mt-0.5 truncate max-w-xs">{l.title}</p>
+                      <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title}</p>
                     </td>
                     <td className="px-5 py-3 text-slate-500 text-xs">{l.ownerName}</td>
                     <td className="px-5 py-3">
@@ -461,7 +461,7 @@ export function ListingsClient({
                       <td className="px-5 py-3">
                         <p className="text-navy font-medium">{l.player}</p>
                         <p className="text-slate-400 text-xs">{l.year} · {l.set}</p>
-                        <p className="text-slate-500 text-xs mt-0.5 truncate max-w-md">{l.title}</p>
+                        <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title}</p>
                       </td>
                       <td className="px-5 py-3 text-xs">
                         {l.buyerName ? (
@@ -531,7 +531,7 @@ export function ListingsClient({
                       <td className="px-5 py-3 align-top">
                         <p className="text-navy font-medium">{l.player}</p>
                         <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
-                        <p className="text-slate-500 text-xs mt-0.5 truncate max-w-sm">{l.title}</p>
+                        <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title}</p>
                         {l.ebayListingId && (
                           <p className="text-slate-400 text-xs mt-0.5">
                             eBay #{l.ebayListingId}{" "}
@@ -606,7 +606,7 @@ export function ListingsClient({
                       <td className="px-5 py-3 align-top">
                         <p className="text-navy font-medium">{l.player}</p>
                         <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
-                        <p className="text-slate-500 text-xs mt-0.5 truncate max-w-sm">{l.title}</p>
+                        <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title}</p>
                         {l.ebayListingId && (
                           <p className="text-slate-400 text-xs mt-0.5">
                             eBay #{l.ebayListingId}{" "}
@@ -696,7 +696,7 @@ export function ListingsClient({
                       <td className="px-5 py-3">
                         <p className="text-navy font-medium">{l.player}</p>
                         <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
-                        <p className="text-slate-500 text-xs mt-0.5 truncate max-w-xs">{l.title || <span className="italic">Draft</span>}</p>
+                        <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title || <span className="italic">Draft</span>}</p>
                         {l.ebayListingId && (
                           <p className="text-slate-400 text-xs mt-0.5">
                             eBay #{l.ebayListingId}{" "}
@@ -810,7 +810,7 @@ export function ListingsClient({
                         <Fragment key={l.ebayItemId}>
                           <tr className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                             <td className="px-5 py-3">
-                              <p className="text-navy font-medium truncate max-w-sm">{l.title ?? l.ebayItemId}</p>
+                              <p className="text-navy font-medium break-words">{l.title ?? l.ebayItemId}</p>
                               <p className="text-slate-400 text-xs mt-0.5">
                                 eBay #{l.ebayItemId}{" "}
                                 {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}

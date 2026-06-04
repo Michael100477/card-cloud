@@ -137,20 +137,25 @@ export async function syncOrders(): Promise<OrderSyncResult> {
         ...(shippedAt       ? { shippedAt }                      : {}),
       };
 
+      // Don't ever downgrade status — but always sync tracking + carrier
+      // + shippedAt even if we already marked it shipped, because those
+      // come from eBay after the initial mark-shipped action.
+      const dataWithStatus    = { ...commonData, status: nextStatus };
+      const dataWithoutStatus = { ...commonData };
+      // remove status key from the no-status variant
+      delete (dataWithoutStatus as { status?: string }).status;
+
       // Update Internal listing if it matches
       const internal = await db.internalListing.findFirst({
         where: { ebayListingId: legacyListingId },
         select: { id: true, status: true },
       });
       if (internal) {
-        // Don't downgrade — if user already marked shipped, leave alone.
-        if (internal.status !== "shipped") {
-          await db.internalListing.update({
-            where: { id: internal.id },
-            data:  { ...commonData, status: nextStatus },
-          });
-          result.rowsUpdated++;
-        }
+        await db.internalListing.update({
+          where: { id: internal.id },
+          data:  internal.status === "shipped" ? dataWithoutStatus : dataWithStatus,
+        });
+        result.rowsUpdated++;
       }
 
       // Update Consignment EbayListing if it matches
@@ -159,13 +164,11 @@ export async function syncOrders(): Promise<OrderSyncResult> {
         select: { id: true, status: true },
       });
       if (consign) {
-        if (consign.status !== "shipped") {
-          await db.ebayListing.update({
-            where: { id: consign.id },
-            data:  { ...commonData, status: nextStatus },
-          });
-          result.rowsUpdated++;
-        }
+        await db.ebayListing.update({
+          where: { id: consign.id },
+          data:  consign.status === "shipped" ? dataWithoutStatus : dataWithStatus,
+        });
+        result.rowsUpdated++;
       }
     }
   }

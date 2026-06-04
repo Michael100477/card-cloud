@@ -22,6 +22,7 @@ interface EbayOrderLineItem {
   legacyItemId: string;
   title: string;
   sku?: string;
+  lineItemCost?: { value?: string; currency?: string };
 }
 
 interface EbayOrder {
@@ -126,6 +127,11 @@ export async function syncOrders(): Promise<OrderSyncResult> {
         : isPaid    ? "paid"
         :             "sold";
 
+      // Per-line-item sale price (eBay reports it on lineItemCost). Falls
+      // back to undefined for older orders where eBay didn't include it.
+      const linePriceStr = li.lineItemCost?.value;
+      const linePrice    = linePriceStr ? parseFloat(linePriceStr) : null;
+
       const commonData = {
         ebayOrderId:  order.orderId,
         buyerName,
@@ -135,6 +141,7 @@ export async function syncOrders(): Promise<OrderSyncResult> {
         ...(trackingNumber  ? { trackingNumber }                 : {}),
         ...(shippingCarrier ? { shippingCarrier }                : {}),
         ...(shippedAt       ? { shippedAt }                      : {}),
+        ...(linePrice != null && !isNaN(linePrice) ? { soldPrice: linePrice } : {}),
       };
 
       // Don't ever downgrade status — but always sync tracking + carrier

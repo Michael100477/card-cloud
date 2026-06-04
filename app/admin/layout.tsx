@@ -81,8 +81,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </aside>
 
-      {/* Main — centered, responsive, ~3/4 of available width */}
-      <main className="ml-56 flex-1 min-h-screen bg-slate-100">
+      {/* Main — centered, responsive. min-w-0 + overflow-x-hidden so wide
+          children (tables, code blocks) cause an internal scrollbar instead
+          of pushing the viewport out horizontally. */}
+      <main className="ml-56 flex-1 min-w-0 min-h-screen bg-slate-100 overflow-x-hidden">
         <div className="max-w-screen-xl mx-auto">
           {children}
         </div>

@@ -307,7 +307,7 @@ export function ListingsClient({
     <div className="flex flex-col gap-4">
       {/* Tabs */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
           {(["consignment", "internal", "waiting", "paid", "shipped"] as const).map(t => {
             const label = t === "consignment" ? "Consignment"
                         : t === "internal"    ? "Internal"

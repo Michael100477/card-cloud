@@ -35,11 +35,14 @@ interface EbayOrder {
   fulfillmentStartInstructions?: Array<{
     shippingStep?: {
       shipTo?: EbayAddress;
+      shippingCarrierCode?: string;
     };
   }>;
+  fulfillmentHrefs?: string[];   // last URL segment is the tracking number
   buyer?: { username?: string };
   lineItems?: EbayOrderLineItem[];
   creationDate?: string;
+  lastModifiedDate?: string;
 }
 
 export interface OrderSyncResult {
@@ -98,6 +101,20 @@ export async function syncOrders(): Promise<OrderSyncResult> {
     } : null;
     const buyerName = shipTo?.fullName ?? order.buyer?.username ?? null;
 
+    // Tracking + carrier — present once the seller has uploaded a label
+    // to eBay. `fulfillmentHrefs[0]` ends in the tracking number; the
+    // carrier code lives on the shipping step.
+    const trackingNumber = (() => {
+      const href = order.fulfillmentHrefs?.[0];
+      if (!href) return null;
+      const m = href.match(/shipping_fulfillment\/([^/?]+)/);
+      return m?.[1] ?? null;
+    })();
+    const shippingCarrier = order.fulfillmentStartInstructions?.[0]?.shippingStep?.shippingCarrierCode ?? null;
+    const shippedAt = isFulfilled
+      ? (order.lastModifiedDate ? new Date(order.lastModifiedDate) : new Date())
+      : null;
+
     for (const li of order.lineItems ?? []) {
       const legacyListingId = li.legacyItemId;
       if (!legacyListingId) continue;
@@ -115,6 +132,9 @@ export async function syncOrders(): Promise<OrderSyncResult> {
         buyerAddress: buyerAddress as object | null,
         paidAt:       paidAt ?? undefined,
         soldAt:       order.creationDate ? new Date(order.creationDate) : undefined,
+        ...(trackingNumber  ? { trackingNumber }                 : {}),
+        ...(shippingCarrier ? { shippingCarrier }                : {}),
+        ...(shippedAt       ? { shippedAt }                      : {}),
       };
 
       // Update Internal listing if it matches

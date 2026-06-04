@@ -680,6 +680,7 @@ model EbayListing {
   buyerAddress      Json?     // { street1, street2?, city, state, postalCode, country }
   shippingLabelUrl  String?   @db.Text
   trackingNumber    String?
+  shippingCarrier   String?   // USPS, UPS, FedEx, DHL — used to build tracking URLs
   shippedAt         DateTime?
 
   createdAt DateTime @default(now())
@@ -843,6 +844,7 @@ model InternalListing {
   buyerAddress      Json?     // { street1, street2?, city, state, postalCode, country }
   shippingLabelUrl  String?   @db.Text
   trackingNumber    String?
+  shippingCarrier   String?   // USPS, UPS, FedEx, DHL — used to build tracking URLs
   shippedAt         DateTime?
 
   @@map("internal_listings")

@@ -123,6 +123,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     shippingLabelUrl: l.shippingLabelUrl,
     buyerName:        l.buyerName,
     paidAt:           l.paidAt?.toISOString() ?? null,
+    shippingCarrier:  l.shippingCarrier,
   }));
 
   const serializedInternal = savedInternalListings.map(l => ({
@@ -152,6 +153,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     shippingLabelUrl: l.shippingLabelUrl,
     buyerName:        l.buyerName,
     paidAt:           l.paidAt?.toISOString() ?? null,
+    shippingCarrier:  l.shippingCarrier,
   }));
 
   return (

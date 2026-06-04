@@ -23,6 +23,18 @@ function timeLeft(endTime: string | null, now: number): string | null {
   return `${d}d ${h % 24}h left`;
 }
 
+// Build a tracking URL from a carrier code + tracking number, falling back
+// to a universal tracker when we don't recognise the carrier.
+function trackingUrl(carrier: string | null, tracking: string): string {
+  const c = (carrier ?? "").toUpperCase();
+  if (c.includes("USPS"))  return `https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=${tracking}`;
+  if (c.includes("UPS"))   return `https://www.ups.com/track?tracknum=${tracking}`;
+  if (c.includes("FEDEX")) return `https://www.fedex.com/fedextrack/?trknbr=${tracking}`;
+  if (c.includes("DHL"))   return `https://www.dhl.com/en/express/tracking.html?AWB=${tracking}`;
+  // Unknown carrier — 17track auto-detects across major carriers.
+  return `https://www.17track.net/en/track?nums=${tracking}`;
+}
+
 // Absolute end-time label, e.g. "Sun, May 31, 10:00 PM" — local time of the admin.
 function endLabel(endTime: string | null): string | null {
   if (!endTime) return null;
@@ -43,6 +55,7 @@ interface Listing {
   trackingNumber: string | null; shippedAt: string | null;
   shippingLabelUrl: string | null; buyerName: string | null;
   paidAt: string | null;
+  shippingCarrier: string | null;
 }
 
 interface InternalListing {
@@ -58,6 +71,7 @@ interface InternalListing {
   trackingNumber: string | null; shippedAt: string | null;
   shippingLabelUrl: string | null; buyerName: string | null;
   paidAt: string | null;
+  shippingCarrier: string | null;
 }
 
 interface DirectListing {
@@ -570,10 +584,20 @@ export function ListingsClient({
                       </td>
                       <td className="px-5 py-3 align-top text-xs">
                         {l.shippedAt && <p className="text-green-700 font-semibold">Shipped {new Date(l.shippedAt).toLocaleDateString()}</p>}
-                        {l.trackingNumber && (
-                          <p className="text-slate-500 mt-0.5">Tracking: <span className="text-navy font-mono">{l.trackingNumber}</span></p>
+                        {l.trackingNumber ? (
+                          <p className="text-slate-500 mt-0.5">
+                            {l.shippingCarrier ? `${l.shippingCarrier}: ` : "Tracking: "}
+                            <a
+                              href={trackingUrl(l.shippingCarrier, l.trackingNumber)}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-brand font-mono hover:underline"
+                            >
+                              {l.trackingNumber}
+                            </a>
+                          </p>
+                        ) : (
+                          <p className="text-slate-400 italic">No tracking #</p>
                         )}
-                        {!l.trackingNumber && <p className="text-slate-400 italic">No tracking #</p>}
                       </td>
                       <td className="px-5 py-3 align-top">
                         {l.shippingLabelUrl && (

@@ -91,7 +91,7 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left px-5 py-3">Card</th>
@@ -169,4 +169,5 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
     </div>
   );
 }
+
 

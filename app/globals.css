@@ -28,3 +28,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Admin tables: default table-cell behavior refuses to break long
+   unbreakable tokens (eBay item numbers, tracking numbers, URLs) and
+   forces the column wider than its container. This rule lets the browser
+   break inside long tokens as a last resort so the row always fits the
+   space it has, regardless of zoom level or window width. */
+main table th,
+main table td {
+  overflow-wrap: anywhere;
+}

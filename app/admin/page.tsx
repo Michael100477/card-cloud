@@ -49,7 +49,7 @@ export default async function AdminOverviewPage() {
           <h2 className="text-navy font-semibold">Recent signups</h2>
           <Link href="/admin/users" className="text-brand text-sm hover:underline">View all →</Link>
         </div>
-        <table className="w-full text-sm min-w-[720px]">
+        <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
             <tr>
               <th className="text-left px-6 py-3">User</th>
@@ -89,4 +89,5 @@ function PlanBadge({ plan }: { plan: string }) {
   };
   return <span className={`text-xs px-2 py-0.5 rounded font-medium ${cls[plan] ?? "bg-slate-100 text-slate-500"}`}>{plan}</span>;
 }
+
 

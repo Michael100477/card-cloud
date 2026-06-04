@@ -14,7 +14,11 @@ interface Props {
 export function MessageBuyerModal({
   open, onClose, itemId, recipientId, cardTitle, defaultSubject,
 }: Props) {
-  const [subject, setSubject] = useState(defaultSubject ?? `About your purchase: ${cardTitle.slice(0, 60)}`);
+  // Default subject is the listing title itself — eBay buyers recognise
+  // their purchase by its title in their Messages inbox. eBay caps the
+  // subject at 60 chars; trim with an ellipsis if longer.
+  const trimmedTitle = cardTitle.length > 60 ? `${cardTitle.slice(0, 57)}…` : cardTitle;
+  const [subject, setSubject] = useState(defaultSubject ?? trimmedTitle);
   const [body,    setBody]    = useState("");
   const [sending, setSending] = useState(false);
   const [error,   setError]   = useState("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -662,8 +662,8 @@ export function ListingsClient({
                       const detail     = detailCache[l.ebayItemId];
                       const loading    = detailLoading === l.ebayItemId;
                       return (
-                        <>
-                          <tr key={l.ebayItemId} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <Fragment key={l.ebayItemId}>
+                          <tr className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                             <td className="px-5 py-3">
                               <p className="text-navy font-medium truncate max-w-sm">{l.title ?? l.ebayItemId}</p>
                               <p className="text-slate-400 text-xs mt-0.5">
@@ -756,7 +756,7 @@ export function ListingsClient({
                               </td>
                             </tr>
                           )}
-                        </>
+                        </Fragment>
                       );
                     })}
                   </tbody>

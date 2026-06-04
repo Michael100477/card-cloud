@@ -592,11 +592,15 @@ export function ListingsClient({
       })()}
 
       {/* Internal tab — site-created listings */}
-      {tab === "internal" && (
+      {tab === "internal" && (() => {
+        // Show only in-flight listings here. Once a listing flips to
+        // sold / paid / shipped / ended it lives in its dedicated tab.
+        const internalActive = internal.filter(l => ["draft", "scheduled", "active"].includes(l.status));
+        return (
         <>
-          {internal.length === 0 ? (
+          {internalActive.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
-              <p className="text-navy font-semibold mb-2">No internal listings yet</p>
+              <p className="text-navy font-semibold mb-2">No active internal listings</p>
               <p className="text-slate-400 text-sm mb-4">Create a listing for cards from your own inventory.</p>
               <Link href="/admin/internal-listings/new"
                 className="inline-block bg-brand text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-600 transition-colors">
@@ -616,7 +620,7 @@ export function ListingsClient({
                   </tr>
                 </thead>
                 <tbody>
-                  {internal.map((l, i) => (
+                  {internalActive.map((l, i) => (
                     <tr key={l.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                       <td className="px-5 py-3">
                         <p className="text-navy font-medium">{l.player}</p>
@@ -835,7 +839,8 @@ export function ListingsClient({
             )}
           </div>
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }

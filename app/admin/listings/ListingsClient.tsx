@@ -3,6 +3,7 @@
 import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { MessageBuyerModal } from "./MessageBuyerModal";
 
 // US dollar formatter — always two decimals (so $17.5 displays as $17.50).
 const usd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -48,6 +49,7 @@ interface Listing {
   id: string; title: string; status: string; url: string | null;
   startPrice: number; buyItNowPrice: number | null; soldPrice: number | null;
   listedAt: string | null; orderId: string; itemId: string;
+  ebayListingId: string | null;
   player: string; year: number | null; set: string | null;
   grade: string | null; gradeCompany: string | null; ownerName: string;
   currentBid: number | null; bidCount: number | null; watchCount: number | null;
@@ -56,6 +58,7 @@ interface Listing {
   shippingLabelUrl: string | null; buyerName: string | null;
   paidAt: string | null;
   shippingCarrier: string | null;
+  buyerUsername: string | null;
 }
 
 interface InternalListing {
@@ -72,6 +75,7 @@ interface InternalListing {
   shippingLabelUrl: string | null; buyerName: string | null;
   paidAt: string | null;
   shippingCarrier: string | null;
+  buyerUsername: string | null;
 }
 
 interface DirectListing {
@@ -137,6 +141,14 @@ export function ListingsClient({
   // Ticking clock for "time left" labels — bumps every 30s so the
   // countdown stays accurate without a full page refresh.
   const [now, setNow] = useState(() => Date.now());
+
+  // Buyer-message modal — opened from any clickable buyer name on the
+  // sold / paid / shipped tabs.
+  const [msgTarget, setMsgTarget] = useState<{ itemId: string; recipientId: string; cardTitle: string } | null>(null);
+  const openMessage = (itemId: string | null, recipientId: string | null, cardTitle: string) => {
+    if (!itemId || !recipientId) return;
+    setMsgTarget({ itemId, recipientId, cardTitle });
+  };
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
@@ -451,7 +463,18 @@ export function ListingsClient({
                         <p className="text-slate-400 text-xs">{l.year} · {l.set}</p>
                         <p className="text-slate-500 text-xs mt-0.5 truncate max-w-md">{l.title}</p>
                       </td>
-                      <td className="px-5 py-3 text-xs text-navy">{l.buyerName ?? <span className="text-slate-400 italic">not yet synced</span>}</td>
+                      <td className="px-5 py-3 text-xs">
+                        {l.buyerName ? (
+                          <button onClick={() => openMessage(l.ebayListingId, l.buyerUsername, l.title ?? l.player)}
+                            disabled={!l.ebayListingId || !l.buyerUsername}
+                            title={l.buyerUsername ? `Message ${l.buyerUsername} on eBay` : "Buyer username not yet synced"}
+                            className="text-brand hover:underline disabled:text-navy disabled:no-underline disabled:cursor-default">
+                            {l.buyerName}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400 italic">not yet synced</span>
+                        )}
+                      </td>
                       <td className="px-5 py-3 text-navy font-medium">{l.soldPrice != null ? `$${usd(l.soldPrice)}` : <span className="text-slate-400 italic">price syncing…</span>}</td>
                       <td className="px-5 py-3 text-slate-400 text-xs">{l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}</td>
                       <td className="px-5 py-3">
@@ -516,7 +539,18 @@ export function ListingsClient({
                           </p>
                         )}
                       </td>
-                      <td className="px-5 py-3 align-top text-xs text-navy">{l.buyerName ?? "—"}</td>
+                      <td className="px-5 py-3 align-top text-xs">
+                        {l.buyerName ? (
+                          <button onClick={() => openMessage(l.ebayListingId, l.buyerUsername, l.title ?? l.player)}
+                            disabled={!l.ebayListingId || !l.buyerUsername}
+                            title={l.buyerUsername ? `Message ${l.buyerUsername} on eBay` : "Buyer username not yet synced"}
+                            className="text-brand hover:underline disabled:text-navy disabled:no-underline disabled:cursor-default">
+                            {l.buyerName}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
                       <td className="px-5 py-3 align-top">
                         {l.soldPrice != null && <p className="text-navy font-medium text-xs">${usd(l.soldPrice)}</p>}
                       </td>
@@ -580,7 +614,18 @@ export function ListingsClient({
                           </p>
                         )}
                       </td>
-                      <td className="px-5 py-3 align-top text-xs text-navy">{l.buyerName ?? "—"}</td>
+                      <td className="px-5 py-3 align-top text-xs">
+                        {l.buyerName ? (
+                          <button onClick={() => openMessage(l.ebayListingId, l.buyerUsername, l.title ?? l.player)}
+                            disabled={!l.ebayListingId || !l.buyerUsername}
+                            title={l.buyerUsername ? `Message ${l.buyerUsername} on eBay` : "Buyer username not yet synced"}
+                            className="text-brand hover:underline disabled:text-navy disabled:no-underline disabled:cursor-default">
+                            {l.buyerName}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
                       <td className="px-5 py-3 align-top">
                         {l.soldPrice != null && <p className="text-navy font-medium text-xs">${usd(l.soldPrice)}</p>}
                       </td>
@@ -867,6 +912,14 @@ export function ListingsClient({
         </>
         );
       })()}
+
+      <MessageBuyerModal
+        open={msgTarget != null}
+        onClose={() => setMsgTarget(null)}
+        itemId={msgTarget?.itemId ?? ""}
+        recipientId={msgTarget?.recipientId ?? ""}
+        cardTitle={msgTarget?.cardTitle ?? ""}
+      />
     </div>
   );
 }

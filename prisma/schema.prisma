@@ -677,6 +677,7 @@ model EbayListing {
   ebayOrderId       String?
   paidAt            DateTime?
   buyerName         String?
+  buyerUsername     String?  // eBay username — needed to send the buyer a message
   buyerAddress      Json?     // { street1, street2?, city, state, postalCode, country }
   shippingLabelUrl  String?   @db.Text
   trackingNumber    String?
@@ -841,6 +842,7 @@ model InternalListing {
   ebayOrderId       String?
   paidAt            DateTime?
   buyerName         String?
+  buyerUsername     String?  // eBay username — needed to send the buyer a message
   buyerAddress      Json?     // { street1, street2?, city, state, postalCode, country }
   shippingLabelUrl  String?   @db.Text
   trackingNumber    String?

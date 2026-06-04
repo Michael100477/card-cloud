@@ -107,6 +107,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     listedAt:     l.listedAt?.toISOString() ?? null,
     orderId:      l.item.order.id,
     itemId:       l.item.id,
+    ebayListingId: l.ebayListingId,
     player:       l.item.player,
     year:         l.item.year,
     set:          l.item.set,
@@ -122,6 +123,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     shippedAt:        l.shippedAt?.toISOString() ?? null,
     shippingLabelUrl: l.shippingLabelUrl,
     buyerName:        l.buyerName,
+    buyerUsername:    l.buyerUsername,
     paidAt:           l.paidAt?.toISOString() ?? null,
     shippingCarrier:  l.shippingCarrier,
   }));
@@ -152,6 +154,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     shippedAt:        l.shippedAt?.toISOString() ?? null,
     shippingLabelUrl: l.shippingLabelUrl,
     buyerName:        l.buyerName,
+    buyerUsername:    l.buyerUsername,
     paidAt:           l.paidAt?.toISOString() ?? null,
     shippingCarrier:  l.shippingCarrier,
   }));

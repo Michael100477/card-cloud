@@ -100,7 +100,8 @@ export async function syncOrders(): Promise<OrderSyncResult> {
       postalCode: shipTo.contactAddress.postalCode ?? "",
       country:    shipTo.contactAddress.countryCode ?? "US",
     } : null;
-    const buyerName = shipTo?.fullName ?? order.buyer?.username ?? null;
+    const buyerName     = shipTo?.fullName ?? order.buyer?.username ?? null;
+    const buyerUsername = order.buyer?.username ?? null;
 
     // Tracking + carrier — present once the seller has uploaded a label
     // to eBay. `fulfillmentHrefs[0]` ends in the tracking number; the
@@ -135,6 +136,7 @@ export async function syncOrders(): Promise<OrderSyncResult> {
       const commonData = {
         ebayOrderId:  order.orderId,
         buyerName,
+        buyerUsername,
         buyerAddress: buyerAddress as object | null,
         paidAt:       paidAt ?? undefined,
         soldAt:       order.creationDate ? new Date(order.creationDate) : undefined,

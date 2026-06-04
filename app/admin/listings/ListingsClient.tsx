@@ -434,6 +434,7 @@ export function ListingsClient({
               <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left px-5 py-3">Card</th>
+                  <th className="text-left px-5 py-3">Buyer</th>
                   <th className="text-left px-5 py-3">Sale price</th>
                   <th className="text-left px-5 py-3">Sold</th>
                   <th className="px-5 py-3" />
@@ -450,6 +451,7 @@ export function ListingsClient({
                         <p className="text-slate-400 text-xs">{l.year} · {l.set}</p>
                         <p className="text-slate-500 text-xs mt-0.5 truncate max-w-md">{l.title}</p>
                       </td>
+                      <td className="px-5 py-3 text-xs text-navy">{l.buyerName ?? <span className="text-slate-400 italic">not yet synced</span>}</td>
                       <td className="px-5 py-3 text-navy font-medium">{l.soldPrice != null ? `$${usd(l.soldPrice)}` : <span className="text-slate-400 italic">price syncing…</span>}</td>
                       <td className="px-5 py-3 text-slate-400 text-xs">{l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}</td>
                       <td className="px-5 py-3">

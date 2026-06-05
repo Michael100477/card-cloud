@@ -123,12 +123,13 @@ export function ListingsClient({
   const params = useSearchParams();
   const router = useRouter();
 
-  const [tab, setTab] = useState<"consignment" | "internal" | "scheduled" | "waiting" | "paid" | "shipped">(
-    params.get("tab") === "internal"  ? "internal"
+  const [tab, setTab] = useState<"consignment" | "internal" | "scheduled" | "waiting" | "paid" | "shipped" | "ended">(
+    params.get("tab") === "internal"   ? "internal"
     : params.get("tab") === "scheduled" ? "scheduled"
-    : params.get("tab") === "waiting" ? "waiting"
-    : params.get("tab") === "paid"    ? "paid"
-    : params.get("tab") === "shipped" ? "shipped"
+    : params.get("tab") === "waiting"   ? "waiting"
+    : params.get("tab") === "paid"      ? "paid"
+    : params.get("tab") === "shipped"   ? "shipped"
+    : params.get("tab") === "ended"     ? "ended"
     : "consignment"
   );
   // Global search — when non-empty, overrides the tab view and shows
@@ -327,21 +328,24 @@ export function ListingsClient({
       {/* Tabs */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
-          {(["consignment", "internal", "scheduled", "waiting", "paid", "shipped"] as const).map(t => {
+          {(["consignment", "internal", "scheduled", "waiting", "paid", "shipped", "ended"] as const).map(t => {
             const label = t === "consignment" ? "Consignment"
                         : t === "internal"    ? "Internal"
                         : t === "scheduled"   ? "Scheduled"
                         : t === "waiting"     ? "Waiting for payment"
                         : t === "paid"        ? "Waiting to be Shipped"
-                        : "Shipped";
+                        : t === "shipped"     ? "Shipped"
+                        : "Ended";
             const scheduledCount = [...listings, ...internal].filter(l => l.status === "scheduled").length;
             const waitingCount   = [...listings, ...internal].filter(l => l.status === "sold").length;
             const paidCount      = [...listings, ...internal].filter(l => l.status === "paid").length;
             const shippedCount   = [...listings, ...internal].filter(l => l.status === "shipped").length;
+            const endedCount     = [...listings, ...internal].filter(l => l.status === "ended").length;
             const count = t === "scheduled" ? scheduledCount
                         : t === "waiting"   ? waitingCount
                         : t === "paid"      ? paidCount
-                        : t === "shipped"   ? shippedCount : 0;
+                        : t === "shipped"   ? shippedCount
+                        : t === "ended"     ? endedCount : 0;
             return (
               <button key={t} onClick={() => setTab(t)}
                 className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === t ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
@@ -853,6 +857,80 @@ export function ListingsClient({
                              className="text-brand text-xs hover:underline font-medium whitespace-nowrap">
                             ↓ Print label
                           </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
+      {/* Ended tab — listings that ended without selling. Most often
+          auctions that expired with no winning bid; BIN listings that
+          hit their end time; or items the seller manually ended.
+          Auto-demoted into "ended" by page.tsx when they fall off eBay's
+          ActiveList AND aren't in SoldList. */}
+      {!search.trim() && tab === "ended" && (() => {
+        const endedConsign  = listings.filter(l => l.status === "ended");
+        const endedInternal = internal.filter(l => l.status === "ended");
+        const total = endedConsign.length + endedInternal.length;
+        if (total === 0) {
+          return (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+              <p className="text-navy font-semibold mb-2">Nothing ended without selling</p>
+              <p className="text-slate-400 text-sm">Auctions that expired with no winner and BIN listings that hit their end time land here.</p>
+            </div>
+          );
+        }
+        return (
+          <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
+            <table className="w-full text-sm table-fixed">
+              {FIVE_COL_GROUP}
+              <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-5 py-3">Card</th>
+                  <th className="text-left px-5 py-3">Price</th>
+                  <th className="text-left px-5 py-3">Status</th>
+                  <th className="text-left px-5 py-3">Listed</th>
+                  <th className="px-5 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {[...endedConsign.map(l => ({ ...l, kind: "consignment" as const })),
+                  ...endedInternal.map(l => ({ ...l, kind: "internal"   as const }))]
+                  .sort((a, b) => (b.listedAt ?? "").localeCompare(a.listedAt ?? ""))
+                  .map((l, i) => (
+                    <tr key={`ended-${l.kind}-${l.id}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                      <td className="px-5 py-3">
+                        <p className="text-navy font-medium break-words">{l.title || <span className="italic">Draft</span>}</p>
+                        {l.ebayListingId && (
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            eBay #{l.ebayListingId}{" "}
+                            {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
+                        {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE.ended}`}>ended</span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-400 text-xs">
+                        {l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="px-5 py-3">
+                        {l.kind === "internal" ? (
+                          <Link href={`/admin/internal-listings/${l.id}`} className="text-brand text-xs hover:underline font-medium">
+                            Edit listing
+                          </Link>
+                        ) : (
+                          <Link href={`/admin/consignments/${(l as Listing).orderId}`} className="text-brand text-xs hover:underline font-medium">
+                            View order
+                          </Link>
                         )}
                       </td>
                     </tr>

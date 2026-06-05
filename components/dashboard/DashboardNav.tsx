@@ -12,6 +12,7 @@ interface DashboardNavProps {
   displayName: string | null;
   email: string;
   profilePhoto: string | null;
+  isAdmin?: boolean;
 }
 
 const NAV_LINKS = [
@@ -25,7 +26,7 @@ const NAV_LINKS = [
   { label: "Trade",          href: "/dashboard/trade" },
 ];
 
-export function DashboardNav({ username, displayName, email, profilePhoto }: DashboardNavProps) {
+export function DashboardNav({ username, displayName, email, profilePhoto, isAdmin = false }: DashboardNavProps) {
   const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -147,6 +148,17 @@ export function DashboardNav({ username, displayName, email, profilePhoto }: Das
                   <SupportIcon className="w-4 h-4 text-slate-400" />
                   Support
                 </Link>
+
+                {isAdmin && (
+                  <Link
+                    href="/admin"
+                    className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors border-t border-slate-100 mt-1"
+                    onClick={() => setDropdownOpen(false)}
+                  >
+                    <span className="w-4 h-4 flex items-center justify-center text-slate-400 text-base leading-none">⚙</span>
+                    Admin console
+                  </Link>
+                )}
 
                 <div className="border-t border-slate-100 mt-1 pt-1">
                   <button

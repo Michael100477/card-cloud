@@ -19,12 +19,14 @@ export default async function DashboardLayout({
       displayName:     true,
       email:           true,
       profilePhoto:    true,
+      isAdmin:         true,
       suspended:       true,
       suspendedReason: true,
     },
   });
 
   if (!user) redirect("/login");
+  const isAdmin = user.isAdmin || user.email === process.env.ADMIN_EMAIL;
 
   // Suspended users see a notice instead of the dashboard
   if (user.suspended) {
@@ -62,6 +64,7 @@ export default async function DashboardLayout({
         displayName={user.displayName}
         email={user.email}
         profilePhoto={user.profilePhoto}
+        isAdmin={isAdmin}
       />
       <main className="flex-1">{children}</main>
     </div>

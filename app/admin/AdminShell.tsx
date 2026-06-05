@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 
 interface NavItem {
   section?: string;
@@ -93,15 +94,22 @@ export function AdminShell({ nav, children }: { nav: NavItem[]; children: React.
           )}
         </nav>
 
-        {/* Footer — exit admin */}
-        <div className="px-2 py-4 border-t border-white/10 shrink-0">
+        {/* Footer — exit admin + sign out */}
+        <div className="px-2 py-4 border-t border-white/10 shrink-0 flex flex-col gap-0.5">
           <Link
             href="/dashboard"
-            title={effectiveCollapsed ? "Exit admin" : undefined}
+            title={effectiveCollapsed ? "Exit admin (back to dashboard)" : undefined}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white/40 hover:text-white/70 text-xs transition-colors ${effectiveCollapsed ? "justify-center" : ""}`}
           >
             {effectiveCollapsed ? "←" : "← Exit admin"}
           </Link>
+          <button
+            onClick={() => signOut({ callbackUrl: "/" })}
+            title={effectiveCollapsed ? "Sign out" : undefined}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white/40 hover:text-white/70 text-xs transition-colors w-full text-left ${effectiveCollapsed ? "justify-center" : ""}`}
+          >
+            {effectiveCollapsed ? "⎋" : "⎋ Sign out"}
+          </button>
         </div>
       </aside>
 

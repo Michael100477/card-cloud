@@ -90,6 +90,18 @@ Added both scopes:
 
 App restarted; Mike now needs to re-authorize the eBay connection so a new access token is minted with the expanded scope set. Reconnect path: Admin → API Keys → eBay — Production panel → "Reconnect eBay account" button.
 
+**Iteration 10 (16:45):** Mike noticed clicking Reconnect on local redirected him to Railway. Root cause: the `ebay_ru_name_prod` credential is set to Railway's callback URL (eBay requires `redirect_uri` to match exactly). So the OAuth flow started on local but ended on Railway — Railway's DB got the new tokens, local's didn't. Compounded by Railway still running the OLD code without `sell.logistics` in its requested scopes, so even though eBay was approached with the new scope from local, Railway's understanding of the token didn't change.
+
+**Push to Railway at 16:50** — commit `08f8770` on main. Bundled all of today's work:
+- Mirror-eBay: auto-create + syncSoldListings + GetItemTransactions buyer fetch + 60-day window
+- Page-tsx fixes: hasFreshEbaySnapshot gate + savedInternalListings filter + soldAt serialization
+- UI: uniform title format across 5 tabs + Shipping page + always-show View link + buyer fallback + soldAt column + buyer-grouped Waiting to be Shipped rows
+- direct-listings/route.ts filter fix
+- OAuth scopes: added `sell.logistics` + `sell.fulfillment`
+- `.gitignore` adds `db-backups/` so local rollback dumps stay local
+
+12 files changed, 1115+/92-. After Railway finishes auto-deploying (~2–3 min), Mike will revoke the app in his eBay account settings and reconnect to force a full fresh authorization with the new scope set.
+
 ---
 
 ## 2026-06-08 12:25 — Diagnosed: ended auctions + paid auctions stranded by auto-demote gate

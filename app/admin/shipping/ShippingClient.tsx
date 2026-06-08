@@ -105,11 +105,12 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
               {filtered.map((r, i) => (
                 <tr key={r.key} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                   <td className="px-5 py-3 align-top">
-                    <p className="text-navy font-medium">{r.player}</p>
-                    <p className="text-slate-400 text-xs">{r.year} · {r.set ?? ""}</p>
-                    <p className="text-slate-500 text-xs mt-0.5 truncate max-w-sm">{r.title}</p>
+                    <p className="text-navy font-medium break-words">{r.title || <span className="italic">Draft</span>}</p>
                     {r.ebayListingId && (
-                      <p className="text-slate-400 text-xs mt-0.5">eBay #{r.ebayListingId}</p>
+                      <p className="text-slate-400 text-xs mt-0.5">
+                        eBay #{r.ebayListingId}{" "}
+                        <a href={`https://www.ebay.com/itm/${r.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
+                      </p>
                     )}
                   </td>
                   <td className="px-5 py-3 align-top text-xs">

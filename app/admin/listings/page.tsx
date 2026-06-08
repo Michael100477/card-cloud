@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getLivePrices, getSoldPrices } from "@/lib/ebay-live-prices";
+import { getLivePrices, getSoldPrices, hasFreshEbaySnapshot } from "@/lib/ebay-live-prices";
 import { getQuestionCounts } from "@/lib/ebay-question-counts";
 import { syncOrdersThrottled } from "@/lib/ebay-sync-cache";
 import { ListingsClient } from "./ListingsClient";
@@ -44,8 +44,10 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
   // eBay returns three buckets for each listing: ActiveList (still live),
   // SoldList (ended with a winner), and absent (ended without a winner).
   // We promote active→sold for the second bucket and active→ended for the
-  // third. Skip if ActiveList is empty (eBay temp outage — don't nuke rows).
-  if (livePrices.size > 0) {
+  // third. Gate on whether we got a fresh successful eBay snapshot, NOT on
+  // whether it returned any active items — a user with zero live auctions
+  // is a normal state, and would otherwise strand any "active" rows forever.
+  if (await hasFreshEbaySnapshot()) {
     const liveIds    = new Set(livePrices.keys());
     const soldPrices = await getSoldPrices();
     type Row = { id: string; status: string; ebayListingId: string | null; soldPrice: unknown };
@@ -87,9 +89,17 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
   }
 
   // Hide imports the admin hasn't actually saved yet — they belong in the
-  // "Listed Directly on eBay" section until first save.
+  // "Listed Directly on eBay" section until first save. "Saved" means the
+  // row has lifecycle data the admin or eBay sync wrote (a status past
+  // draft, a buyer, a paid/shipped timestamp, etc.) — using updatedAt vs
+  // createdAt was brittle because Prisma can write both equal on insert.
   const savedInternalListings = internalListings.filter(l =>
-    !l.ebayListingId || l.updatedAt.getTime() > l.createdAt.getTime() + 1000
+    !l.ebayListingId
+    || l.status !== "draft"
+    || l.buyerUsername != null
+    || l.paidAt != null
+    || l.shippedAt != null
+    || l.soldPrice != null
   );
 
   const active    = listings.filter(l => l.status === "active").length;
@@ -125,6 +135,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     buyerName:        l.buyerName,
     buyerUsername:    l.buyerUsername,
     paidAt:           l.paidAt?.toISOString() ?? null,
+    soldAt:           l.soldAt?.toISOString() ?? null,
     shippingCarrier:  l.shippingCarrier,
   }));
 
@@ -156,6 +167,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     buyerName:        l.buyerName,
     buyerUsername:    l.buyerUsername,
     paidAt:           l.paidAt?.toISOString() ?? null,
+    soldAt:           l.soldAt?.toISOString() ?? null,
     shippingCarrier:  l.shippingCarrier,
   }));
 

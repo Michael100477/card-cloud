@@ -5,6 +5,180 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-06-08 12:55 — Mirror-eBay fix: auto-import unmatched orders + repair gates and filters
+
+**Request:** Mike's framing — "The orders on the site should mimic what eBay shows me. It shouldn't matter where I list them." Card Cloud's eBay Listings page must mirror eBay 1:1, regardless of whether a listing started inside Card Cloud or directly on eBay.
+
+**Rollback first:** `pg_dump` to `db-backups/local-2026-06-08T0850.sql` (254.7 KB) before any code touched data. Restore command logged in the rollback file.
+
+**Changes (local only — not pushed to Railway):**
+
+1. **`lib/ebay-live-prices.ts` — track API success.** Added an `ok: boolean` flag to the cache and a new `hasFreshEbaySnapshot()` helper. On HTTP failure we now store `ok:false` so callers can distinguish "eBay said zero items" from "eBay request failed."
+2. **`app/admin/listings/page.tsx` — replace brittle auto-demote gate.** Was `if (livePrices.size > 0)` — a user with genuinely zero live auctions would have their ended rows stranded in `active` forever. Now `if (await hasFreshEbaySnapshot())`, which gates only on whether eBay actually responded.
+3. **`app/admin/listings/page.tsx` — fix `savedInternalListings` filter.** Was `updatedAt > createdAt + 1s` which Prisma can violate on insert (writing both timestamps equal). Now checks for actual lifecycle data: `status !== "draft" || buyerUsername || paidAt || shippedAt || soldPrice`. The 1 active listing with `delta=0s` (Bo Jackson 2024 Cards ReImagined) is no longer hidden.
+4. **`lib/ebay-orders.ts` — auto-create rows for unmatched eBay orders.** When `syncOrders` sees an order whose `legacyItemId` doesn't exist in either `internal_listings` or `ebay_listings`, it now creates an `internal_listing` with title/status/price/buyer/tracking from the order. `player` is set to `""` for these (admin can fill in later). All schema defaults cover the eBay-config fields we don't have.
+
+**Verified locally:** restarted `card-cloud-app`, hit `/admin/listings`, observed `[order-sync] fetched 26 orders, updated 38 rows`. Final counts: 1 active, 1 ended, 5 paid (= eBay's 5 awaiting shipment), 33 shipped, 2 sold, total 42. 31 of those rows were auto-imported by the fix (identified by `player = ''`).
+
+**Open follow-up:** Mike's eBay shows 5 in "Waiting for Payment" — Card Cloud shows 2. The 3 missing are likely auctions that ended very recently where eBay hasn't yet generated an order (no committed buyer yet). Those don't come through the Fulfillment API and need a separate path — pull from `GetMyeBaySelling`'s `SoldList` in `getLivePrices`, auto-create rows for unmatched ones. Awaiting Mike's confirmation post-refresh before adding that layer.
+
+**Iteration 2 (13:30):** Confirmed — Waiting for Payment was 2 not 5. Built the SoldList importer.
+
+- `lib/ebay-live-prices.ts` — SoldList parser now also extracts `<Title>`; sold map type changed from `Map<string, number>` to `Map<string, {price, title}>`. New export `getSoldListings()`.
+- `lib/ebay-orders.ts` — new helper `importUnmatchedSoldListings()` creates `internal_listing` rows for SoldList items absent from both tables, status=`sold`.
+- `lib/ebay-sync-cache.ts` — `syncOrdersThrottled` now also runs the SoldList importer.
+- **`lib/ebay-orders.ts` order fetch window bumped 30 → 60 days** to match SoldList's window. Without this, items 30–60 days old that already paid/shipped were getting imported as `sold` because the order-API window missed their order. Final breakdown: 1 active, 1 ended, **5 paid (= eBay's 5 awaiting shipment)**, 43 shipped, **5 sold (= eBay's 5 waiting for payment)**, total 55.
+
+**Push status:** NOT pushed to Railway. Awaiting Mike's UI verification on localhost:3001.
+
+**Iteration 3 (13:55):** Mike screenshot review — two more UI bugs.
+
+1. **Duplicate row on Internal tab** — Bo Jackson 2024 ReImagined appeared in both the "Internal" table and the "Listed Directly on eBay" table below it. Root cause: `/api/admin/ebay/direct-listings` used the same broken `updatedAt > createdAt + 1s` filter that page.tsx had. Fixed: now excludes any row with `status IN ('active','scheduled')` regardless of timestamps — those rows ARE the listing in Card Cloud's view.
+2. **Inconsistent title rendering across status tabs** — manually-created rows showed a bold player + light year/set header above the title; auto-imported rows showed only the title (because `player`/`year`/`set` are empty for them). Mike wants the uniform "just the title" style. Updated the Card cell in 4 tabs to match the Ended/Internal-active style: single `<p className="text-navy font-medium break-words">{l.title}</p>` line. Affected: Consignment, Waiting for Payment, Waiting to be Shipped, Shipped.
+
+Files: `app/admin/listings/ListingsClient.tsx`, `app/api/admin/ebay/direct-listings/route.ts`.
+
+**Iteration 4 (14:15):** Mike screenshot of Waiting to be Shipped — two more inconsistencies.
+
+1. **Waiting for Payment and Consignment tabs missing the eBay # + View → block** that Waiting to be Shipped, Shipped, Ended, and Internal already show. Added it to both. Same `<p className="text-slate-400 text-xs mt-0.5">eBay #... View →</p>` pattern.
+2. **View → link was conditional on `l.url` being set** — auto-imported rows have no URL in our DB (eBay's order data doesn't include `ViewItemURL`), so they showed eBay # with no link. Changed all six rendering sites to a single `replace_all`: `<a href={l.url || \`https://www.ebay.com/itm/${l.ebayListingId}\`} ...>` so the link always renders, falling back to the deterministic eBay item URL when we don't have a stored one.
+
+Files: `app/admin/listings/ListingsClient.tsx`.
+
+**Iteration 5 (14:50):** Sold date wrong + buyer "not yet synced" on all 5 Waiting-for-Payment rows.
+
+- **Sold date bug:** the "Sold" column was reading `listedAt` (when the listing went live) instead of `soldAt` (auction end). Renamed: `app/admin/listings/page.tsx` serializers now also emit `soldAt`; `ListingsClient.tsx` interface adds `soldAt`; waiting-tab render uses `l.soldAt ?? l.listedAt`.
+- **soldAt source for auto-imported rows:** `lib/ebay-live-prices.ts` SoldList parser now also extracts `<EndTime>`. `lib/ebay-orders.ts` `syncSoldListings` writes `soldAt = endTime` on create. Verified — `2026-06-08T02:07:10` etc. populate correctly.
+- **Buyer info:** instrumented the SoldList parser to log the actual XML tags returned. eBay's `GetMyeBaySelling` `SoldList` does **not** include any buyer fields (no `HighBidder`, no `Buyer`, no `BuyerUserID`). Buyer info is only available via the Orders API after eBay generates the order record (when the buyer commits to checkout). Left a permissive multi-shape buyer regex in place for forward compatibility if eBay starts returning it, but for now `buyerUsername` stays null on SoldList-only rows until syncOrders catches them.
+- **`syncSoldListings` (renamed from `importUnmatchedSoldListings`)** also now backfills `soldAt`, `buyerUsername`, `soldPrice`, and `title` on EXISTING rows when those fields are null — without overwriting populated values. Useful for Card-Cloud-created rows that auto-demoted active→sold but whose order hasn't materialized yet.
+- **Waiting tab buyer display:** falls back to `buyerUsername` if `buyerName` (full name from shipping address) isn't yet available.
+
+Files: `lib/ebay-live-prices.ts`, `lib/ebay-orders.ts`, `lib/ebay-sync-cache.ts`, `app/admin/listings/page.tsx`, `app/admin/listings/ListingsClient.tsx`.
+
+**Iteration 6 (15:30):** Mike picked option (b) — actively fetch buyer info via `GetItemTransactions` instead of waiting for eBay to generate an order.
+
+- **New `fetchBuyerInfo(itemId)`** in `lib/ebay-orders.ts` — single-item eBay Trading API call to `GetItemTransactions`, parses `<Buyer><UserID>` + `<RegistrationAddress><Name>`, returns `{ username, name }`.
+- **`syncSoldListings` extended** with a third phase after create/update: for each row matching `status=sold AND buyerUsername IS NULL AND ebayOrderId IS NULL` (capped at 25 per run for API-quota safety), fetch buyer and patch `buyerUsername` + `buyerName`. Once populated, the row is skipped on future runs.
+- **Verified end-to-end:** 4 of the 5 sold rows now show their actual buyers — visgt/Jeremy Vanover, collector21-22/RAYMOND VALLES (×2), briansmustanggt/Brian Shestko — matching Mike's eBay awaiting-payment screenshot exactly. The 5th (arn57/Bill Spivey, item 298379497491) had paid in the interim, so `syncOrders` correctly promoted it from `sold` → `paid` with the order ID `12-14740-54115` and it now lives in Waiting to be Shipped. End state matches eBay's reality.
+
+Files: `lib/ebay-orders.ts`, `lib/ebay-sync-cache.ts`.
+
+**Push status:** still NOT pushed to Railway. The mirror-eBay work is now complete pending Mike's final visual check.
+
+**Iteration 7 (15:55):** Group Waiting-to-be-Shipped rows by buyer so multi-item orders ship together.
+
+- Replaced the per-item map in the paid tab tbody with a grouping IIFE keyed on `buyerUsername` (fallback to per-row id when username is missing).
+- Each group renders as a single `<tr>`: all items stacked in the Card cell (with a thin slate-100 divider between them), single buyer-message button, sale cell shows total + per-item breakdown for multi-item groups, latest paidAt timestamp, single Create label button.
+- Added a `📦 N items — ship together` amber badge when a group has more than one item.
+- Groups sorted by latest paidAt across the group (newest first), matching the previous per-row sort.
+
+Verified with the existing data: Jeremy Vanover has 2 paid items (Bo Jackson Sweet Spot + Leaf Limited Lumberjacks) — they now render as a single row with a total of $235.83, one buyer button, one Create label button, and the 📦 badge.
+
+Files: `app/admin/listings/ListingsClient.tsx`.
+
+**Iteration 8 (16:10):** Same title-format inconsistency on the Shipping admin page (`/admin/shipping`) "Ready to Ship" tab — manually-created rows showed bold player + year/set header, auto-imported rows just showed the title. Applied the same fix.
+
+`app/admin/shipping/ShippingClient.tsx` lines 108–113: replaced the three-line player/year/set/title block with the unified single-line `<p className="text-navy font-medium break-words">{r.title || Draft}</p>` plus the eBay # + always-show View → link (constructs from itemId when no stored URL). Also dropped the `truncate max-w-sm` on the title so long names wrap instead of getting cut off.
+
+**Iteration 9 (16:25):** Create Label button returned `Shipping quote failed (404): {}`. Root cause: the OAuth scope list at `lib/ebay-auth.ts:40` was missing `sell.logistics` (required for `/sell/logistics/v1/shipping_quote` + `/shipment`) and `sell.fulfillment` write (the post-label call to `/sell/fulfillment/v1/order/{id}/shipping_fulfillment` would fail next).
+
+Added both scopes:
+```
++ sell.fulfillment              // POST shipping_fulfillment
++ sell.logistics                // shipping_quote + buy label
+```
+
+App restarted; Mike now needs to re-authorize the eBay connection so a new access token is minted with the expanded scope set. Reconnect path: Admin → API Keys → eBay — Production panel → "Reconnect eBay account" button.
+
+---
+
+## 2026-06-08 12:25 — Diagnosed: ended auctions + paid auctions stranded by auto-demote gate
+
+**Symptom:** Auctions that ended last night were missing from every tab (not on Internal, not on Waiting for Payment, not on Ended). Two listings paid for over the weekend were still showing in Waiting for Payment instead of Waiting to be Shipped.
+
+**Finding:** As of 12:15 PM EDT today, the local Docker DB reflects correct statuses (2 sold, 2 paid, 5 shipped, 1 ended, 1 active) — but before then everything was stale. Two root causes identified:
+
+1. **`livePrices.size > 0` gate in [app/admin/listings/page.tsx:48](app/admin/listings/page.tsx#L48)** — auto-demote is skipped entirely if eBay returns 0 active listings. Originally a safety check for eBay outages, but it also strands rows in `active` status when the user genuinely has 0 live auctions, because then there's no way to demote them.
+2. **`savedInternalListings` filter in [app/admin/listings/page.tsx:91](app/admin/listings/page.tsx#L91)** — hides rows where `updatedAt - createdAt <= 1s`. One currently-active listing (Bo Jackson 2024 Cards ReImagined) has delta=0s exactly and is being filtered out.
+
+**No code changed yet.** Asked Mike to refresh and confirm the page now matches the DB before proposing a fix. Per the new "confirm before prod" rule, any fix will be staged locally, verified, and approved before pushing to Railway.
+
+**Update — second symptom investigated:** After Mike refreshed, the first 4 listings sorted correctly, but eBay shows 5 in waiting-for-payment + 5 awaiting-shipment while Card Cloud shows 2 + 2. Root cause: the "Listed Directly on eBay" surface (`/api/admin/ebay/direct-listings`) only queries eBay's ActiveList and excludes SoldList/UnsoldList. And `syncOrders` only *updates* matching DB rows — it never *creates* them for orders that have no matching listing. Net effect: direct-on-eBay listings vanish from the UI the moment their auction ends, even though their orders are alive in eBay's pipeline. Fix proposed (awaiting Mike's confirmation that the 6 missing rows are direct-on-eBay): teach `syncOrders` to auto-create an `internal_listing` row when it encounters an unmatched order, populating from the order data and flagging the row as auto-imported.
+
+---
+
+## 2026-06-07 17:40 — Doc-update rule escalated: verify before every response
+
+**Request:** "Always check if you should update those before completing any response you give me. Every time."
+
+**Completed:**
+- Updated `feedback_changelog.md` memory with an explicit self-check step required before *every* response (escalated from the earlier "every session" cadence that let docs drift).
+- New top section lists the triggers that require a changelog or Word-doc update; only response-only conversation with no artifacts and no decisions is exempt.
+
+---
+
+## 2026-06-07 17:25 — Phase 0 of content strategy: voice brief + communities templates
+
+**Request:** After extensive critical discussion, Mike approved the phased content-engine plan. Asked for fill-in templates — first as markdown, then asked for Word/Excel instead.
+
+**Completed:**
+- New folder `C:\Users\mikea\card-cloud\content-strategy\` with:
+  - `generate-templates.ps1` — Word + Excel COM script
+- Generated on Desktop:
+  - `CardCloud_VoiceBrief_Template.docx` — 10-section Word doc with prompts, gray-italic examples, comparison table for "we'd say / wouldn't say", bullets for format preferences.
+  - `CardCloud_Communities_Template.xlsx` — 11-tab workbook (Start Here + one tab per platform + TheCardCloud Properties tab pre-seeded with the platforms we'd want presence on). Each tab has frozen headers and a gray-italic example row.
+- Removed the markdown templates that preceded the Office versions.
+- Strategy plan documented in conversation: six phases (Phase 0 foundation → Phase 6 owned community), with API-driven distribution instead of Buffer, FB monitored via Playwright + saved DOM, voice-brief approach instead of writing samples, target 5,000 paying users at $5/mo.
+
+---
+
+## 2026-06-05 19:00 — Codified dev vs production environment split
+
+**Request:** "Yea we want to keep this environment as development and the railway site as the production and only push to production after we've confirmed something is working properly."
+
+**Completed:**
+- Rewrote `project_production_deployment.md` to lead with the dev/prod topology: local `C:\Users\mikea\card-cloud` on :3001 + Docker Postgres :5433 = dev; Railway + Railway Postgres = prod. Pushes to `main` auto-deploy.
+- Updated `MEMORY.md` index entry to match.
+- Added explicit instruction in `feedback_confirm_before_prod.md` that the two databases are separate and must not be conflated when reasoning about state.
+
+---
+
+## 2026-06-05 18:30 — New rule: never auto-push to production without confirmation
+
+**Request:** "Don't automatically write changes to the production site until we've confirmed that it's working."
+
+**Completed:**
+- New feedback memory `feedback_confirm_before_prod.md`: after finishing a feature, commit locally + verify locally + ask Mike to try it before pushing to `main`. Mike explicitly OK'ing the push, or saying "push it" without trying, is the override.
+- Updated `feedback_git_commits.md` index entry so the commit-after-every-feature rule and the don't-auto-push rule read together instead of contradicting.
+
+---
+
+## 2026-06-04 22:00 — New rule: capture a rollback before any destructive change
+
+**Request:** "Let's try to prevent that from happening again. Write it to your settings that if you are going to be changing the database or any other major change you have a way to reverse it."
+
+**Completed:**
+- New feedback memory `feedback_reversible_changes.md`: before any DB migration, schema reset, container/volume recreation, force-push, etc., capture a rollback first (for Card Cloud's local DB that's `pg_dump` to `card-cloud\db-backups\<timestamp>.sql`) and state the rollback path in chat alongside the action.
+- Triggered by the volume-loss incident earlier that evening — recovery only succeeded because the original PGlite data dir happened to still be on disk.
+
+---
+
+## 2026-06-04 21:30 — Rescued local DB after Docker volume was recreated
+
+**Symptom:** Mike's dashboard showed "no collections or cards" despite having added them previously. Querying the local Docker Postgres (`card-cloud-postgres` on :5433) returned 0 rows for cards, collections, accounts.
+
+**Root cause:** The Docker volume `card-cloud-postgres-data` and the `card-cloud-postgres` container were both recreated today (2026-06-04 10:13 EDT). The 434 rows migrated from PGlite on 2026-05-31 lived only in the volume — recreation wiped them. (Likely a Docker Desktop restart or `compose down -v` between sessions; not pinned.)
+
+**Rescue source:** Found that the original PGlite data directory still exists at `C:\Users\mikea\AppData\Local\prisma-dev-nodejs\Data\default\.pglite` (last written 10:01 AM, 12 minutes before the Docker recreation). Booted it back up with `npx prisma dev`; connection details came from `…\Data\default\server.json` (port 51214, user `postgres`, db `template1`).
+
+**Rescue script (`_rescue_db.ts`, cleaned up after):** Copied all 434 rows from PGlite → Docker Postgres. Key fix vs. the original migration script: **truncate every destination table in ONE `TRUNCATE … CASCADE` statement before inserting any rows**, instead of per-table inside the loop. Per-table cascades nuke rows that were already inserted in earlier iterations (e.g., `TRUNCATE cards CASCADE` later wiped freshly-inserted `card_collections` rows; `TRUNCATE users CASCADE` at the end wiped cards/collections/accounts). With `SET session_replication_role = 'replica'` + one bulk truncate, insert order doesn't matter.
+
+**Final verified counts in Docker Postgres:** users=1, cards=4, collections=1, card_collections=4, internal_listings=11, accounts=1, site_credentials=57. App restarted (`pm2 restart card-cloud-app`); `/dashboard/my-collections` returns 307 (auth redirect — expected).
+
+**Follow-up to schedule:** daily `pg_dump` of the Docker container so a future volume loss isn't recoverable only by luck of finding stale PGlite data. Captured the DB locations + rescue pattern as a reference memory.
+
+---
+
 ## 2026-05-28 — Trading Phase 3: email notifications + dispute flag
 
 **Email provider clarification:** Mike confirmed Card Cloud sends email via SMTP through `sendTransactionalEmail()` in `lib/transactional-email.ts` (nodemailer + admin-configured SMTP credentials). Resend is just a fallback. Saved as a feedback memory so I don't drift back to mentioning Resend.

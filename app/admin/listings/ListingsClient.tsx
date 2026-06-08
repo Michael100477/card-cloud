@@ -70,6 +70,7 @@ interface Listing {
   trackingNumber: string | null; shippedAt: string | null;
   shippingLabelUrl: string | null; buyerName: string | null;
   paidAt: string | null;
+  soldAt: string | null;
   shippingCarrier: string | null;
   buyerUsername: string | null;
 }
@@ -87,6 +88,7 @@ interface InternalListing {
   trackingNumber: string | null; shippedAt: string | null;
   shippingLabelUrl: string | null; buyerName: string | null;
   paidAt: string | null;
+  soldAt: string | null;
   shippingCarrier: string | null;
   buyerUsername: string | null;
 }
@@ -432,7 +434,7 @@ export function ListingsClient({
                       {l.ebayListingId && (
                         <p className="text-slate-400 text-xs mt-0.5">
                           eBay #{l.ebayListingId}{" "}
-                          {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                          <a href={l.url || `https://www.ebay.com/itm/${l.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
                         </p>
                       )}
                     </td>
@@ -492,9 +494,13 @@ export function ListingsClient({
                 {listings.map((l, i) => (
                   <tr key={l.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                     <td className="px-5 py-3">
-                      <p className="text-navy font-medium">{l.player}</p>
-                      <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
-                      <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title}</p>
+                      <p className="text-navy font-medium break-words">{l.title || <span className="italic">Draft</span>}</p>
+                      {l.ebayListingId && (
+                        <p className="text-slate-400 text-xs mt-0.5">
+                          eBay #{l.ebayListingId}{" "}
+                          <a href={l.url || `https://www.ebay.com/itm/${l.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
+                        </p>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-slate-500 text-xs">{l.ownerName}</td>
                     <td className="px-5 py-3">
@@ -599,7 +605,7 @@ export function ListingsClient({
                         {l.ebayListingId && (
                           <p className="text-slate-400 text-xs mt-0.5">
                             eBay #{l.ebayListingId}{" "}
-                            {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                            <a href={l.url || `https://www.ebay.com/itm/${l.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
                           </p>
                         )}
                       </td>
@@ -664,24 +670,28 @@ export function ListingsClient({
                   .map((l, i) => (
                     <tr key={`${l.kind}-${l.id}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                       <td className="px-5 py-3">
-                        <p className="text-navy font-medium">{l.player}</p>
-                        <p className="text-slate-400 text-xs">{l.year} · {l.set}</p>
-                        <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title}</p>
+                        <p className="text-navy font-medium break-words">{l.title || <span className="italic">Draft</span>}</p>
+                        {l.ebayListingId && (
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            eBay #{l.ebayListingId}{" "}
+                            <a href={l.url || `https://www.ebay.com/itm/${l.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
+                          </p>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-xs">
-                        {l.buyerName ? (
+                        {(l.buyerName || l.buyerUsername) ? (
                           <button onClick={() => openMessage(l.ebayListingId, l.buyerUsername, l.title ?? l.player)}
                             disabled={!l.ebayListingId || !l.buyerUsername}
                             title={l.buyerUsername ? `Message ${l.buyerUsername} on eBay` : "Buyer username not yet synced"}
                             className="text-brand hover:underline disabled:text-navy disabled:no-underline disabled:cursor-default">
-                            {l.buyerName}
+                            {l.buyerName || l.buyerUsername}
                           </button>
                         ) : (
                           <span className="text-slate-400 italic">not yet synced</span>
                         )}
                       </td>
                       <td className="px-5 py-3 text-navy font-medium">{l.soldPrice != null ? `$${usd(l.soldPrice)}` : <span className="text-slate-400 italic">price syncing…</span>}</td>
-                      <td className="px-5 py-3 text-slate-400 text-xs">{l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}</td>
+                      <td className="px-5 py-3 text-slate-400 text-xs">{l.soldAt ? new Date(l.soldAt).toLocaleDateString() : l.listedAt ? new Date(l.listedAt).toLocaleDateString() : "—"}</td>
                       <td className="px-5 py-3">
                         <button
                           onClick={async () => {
@@ -728,47 +738,84 @@ export function ListingsClient({
                 </tr>
               </thead>
               <tbody>
-                {[...paidConsign.map(l => ({ ...l, kind: "consignment" as const })),
-                  ...paidInternal.map(l => ({ ...l, kind: "internal"   as const }))]
-                  .sort((a, b) => (b.paidAt ?? "").localeCompare(a.paidAt ?? ""))
-                  .map((l, i) => (
-                    <tr key={`paid-${l.kind}-${l.id}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                      <td className="px-5 py-3 align-top">
-                        <p className="text-navy font-medium">{l.player}</p>
-                        <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
-                        <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title}</p>
-                        {l.ebayListingId && (
-                          <p className="text-slate-400 text-xs mt-0.5">
-                            eBay #{l.ebayListingId}{" "}
-                            {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 align-top text-xs">
-                        {l.buyerName ? (
-                          <button onClick={() => openMessage(l.ebayListingId, l.buyerUsername, l.title ?? l.player)}
-                            disabled={!l.ebayListingId || !l.buyerUsername}
-                            title={l.buyerUsername ? `Message ${l.buyerUsername} on eBay` : "Buyer username not yet synced"}
-                            className="text-brand hover:underline disabled:text-navy disabled:no-underline disabled:cursor-default">
-                            {l.buyerName}
-                          </button>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 align-top">
-                        {l.soldPrice != null && <p className="text-navy font-medium text-xs">${usd(l.soldPrice)}</p>}
-                      </td>
-                      <td className="px-5 py-3 align-top text-xs">
-                        {l.paidAt && <p className="text-green-700 font-semibold">Paid {new Date(l.paidAt).toLocaleDateString()}</p>}
-                      </td>
-                      <td className="px-5 py-3 align-top">
-                        <Link href="/admin/shipping" className="text-brand text-xs hover:underline font-medium whitespace-nowrap">
-                          Create label →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                {(() => {
+                  // Group paid items by buyer so multi-item orders ship as one
+                  // label. Items without a buyer username get their own group
+                  // (keyed on their row id) so they still render individually.
+                  const all = [...paidConsign.map(l => ({ ...l, kind: "consignment" as const })),
+                               ...paidInternal.map(l => ({ ...l, kind: "internal"   as const }))];
+                  const groups = new Map<string, typeof all>();
+                  for (const item of all) {
+                    const key = item.buyerUsername ?? `__no_buyer_${item.id}`;
+                    const existing = groups.get(key) ?? [];
+                    existing.push(item);
+                    groups.set(key, existing);
+                  }
+                  const ordered = [...groups.values()].sort((a, b) => {
+                    const latestA = a.reduce((m, x) => (x.paidAt ?? "") > m ? (x.paidAt ?? "") : m, "");
+                    const latestB = b.reduce((m, x) => (x.paidAt ?? "") > m ? (x.paidAt ?? "") : m, "");
+                    return latestB.localeCompare(latestA);
+                  });
+                  return ordered.map((items, i) => {
+                    const sample      = items[0];
+                    const totalPrice  = items.reduce((s, x) => s + (x.soldPrice ?? 0), 0);
+                    const latestPaid  = items.reduce<string | null>((latest, x) =>
+                      x.paidAt && (!latest || x.paidAt > latest) ? x.paidAt : latest, null);
+                    const groupKey    = sample.buyerUsername ?? sample.id;
+                    return (
+                      <tr key={`paid-group-${groupKey}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="px-5 py-3 align-top">
+                          {items.map((item, j) => (
+                            <div key={item.id} className={j > 0 ? "mt-3 pt-3 border-t border-slate-100" : ""}>
+                              <p className="text-navy font-medium break-words">{item.title || <span className="italic">Draft</span>}</p>
+                              {item.ebayListingId && (
+                                <p className="text-slate-400 text-xs mt-0.5">
+                                  eBay #{item.ebayListingId}{" "}
+                                  <a href={item.url || `https://www.ebay.com/itm/${item.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                          {items.length > 1 && (
+                            <p className="text-amber-700 text-xs mt-2 font-semibold">📦 {items.length} items — ship together</p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 align-top text-xs">
+                          {sample.buyerName ? (
+                            <button onClick={() => openMessage(sample.ebayListingId, sample.buyerUsername, sample.title ?? sample.player)}
+                              disabled={!sample.ebayListingId || !sample.buyerUsername}
+                              title={sample.buyerUsername ? `Message ${sample.buyerUsername} on eBay` : "Buyer username not yet synced"}
+                              className="text-brand hover:underline disabled:text-navy disabled:no-underline disabled:cursor-default">
+                              {sample.buyerName}
+                            </button>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 align-top">
+                          {items.length === 1 ? (
+                            sample.soldPrice != null && <p className="text-navy font-medium text-xs">${usd(sample.soldPrice)}</p>
+                          ) : (
+                            <>
+                              <p className="text-navy font-medium text-xs">${usd(totalPrice)} total</p>
+                              {items.map(item => (
+                                <p key={item.id} className="text-slate-400 text-xs">${usd(item.soldPrice ?? 0)}</p>
+                              ))}
+                            </>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 align-top text-xs">
+                          {latestPaid && <p className="text-green-700 font-semibold">Paid {new Date(latestPaid).toLocaleDateString()}</p>}
+                        </td>
+                        <td className="px-5 py-3 align-top">
+                          <Link href="/admin/shipping" className="text-brand text-xs hover:underline font-medium whitespace-nowrap">
+                            Create label →
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
@@ -809,13 +856,11 @@ export function ListingsClient({
                   .map((l, i) => (
                     <tr key={`shipped-${l.kind}-${l.id}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                       <td className="px-5 py-3 align-top">
-                        <p className="text-navy font-medium">{l.player}</p>
-                        <p className="text-slate-400 text-xs">{l.year} · {l.set}{l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}</p>
-                        <p className="text-slate-500 text-xs mt-0.5 break-words">{l.title}</p>
+                        <p className="text-navy font-medium break-words">{l.title || <span className="italic">Draft</span>}</p>
                         {l.ebayListingId && (
                           <p className="text-slate-400 text-xs mt-0.5">
                             eBay #{l.ebayListingId}{" "}
-                            {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                            <a href={l.url || `https://www.ebay.com/itm/${l.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
                           </p>
                         )}
                       </td>
@@ -908,7 +953,7 @@ export function ListingsClient({
                         {l.ebayListingId && (
                           <p className="text-slate-400 text-xs mt-0.5">
                             eBay #{l.ebayListingId}{" "}
-                            {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                            <a href={l.url || `https://www.ebay.com/itm/${l.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
                           </p>
                         )}
                       </td>
@@ -978,7 +1023,7 @@ export function ListingsClient({
                         {l.ebayListingId && (
                           <p className="text-slate-400 text-xs mt-0.5">
                             eBay #{l.ebayListingId}{" "}
-                            {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                            <a href={l.url || `https://www.ebay.com/itm/${l.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
                           </p>
                         )}
                       </td>
@@ -1093,7 +1138,7 @@ export function ListingsClient({
                               <p className="text-navy font-medium break-words">{l.title ?? l.ebayItemId}</p>
                               <p className="text-slate-400 text-xs mt-0.5">
                                 eBay #{l.ebayItemId}{" "}
-                                {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>}
+                                <a href={l.url || `https://www.ebay.com/itm/${l.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
                               </p>
                             </td>
                             <td className="px-5 py-3">

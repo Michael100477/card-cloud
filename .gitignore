@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# local DB backups (never push these — may contain sensitive data)
+/db-backups/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

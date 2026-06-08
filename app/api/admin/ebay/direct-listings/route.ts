@@ -86,10 +86,10 @@ export async function GET() {
   }
 
   // Collect eBay IDs already tracked in our DB so we can exclude them.
-  // For InternalListings: only exclude records the admin has actually saved at least once
-  // (updatedAt > createdAt). Fresh imports that were never saved should still appear here
-  // so the admin can re-open them as direct listings without leaving an orphan in the main table.
-  // Include both "active" and "scheduled" statuses (scheduled listings ARE on eBay, just not live yet).
+  // We exclude any internal_listing row whose status is past "draft" (i.e.
+  // active or scheduled) — those rows ARE the listing as far as Card Cloud
+  // is concerned and shouldn't double-up here. Pure unsaved drafts with an
+  // ebayListingId DO still appear so the admin can re-open them.
   const [knownEbay, knownInternal] = await Promise.all([
     db.ebayListing.findMany({
       where: { ebayListingId: { not: null }, status: { in: ["active", "scheduled"] } },
@@ -97,14 +97,12 @@ export async function GET() {
     }),
     db.internalListing.findMany({
       where: { ebayListingId: { not: null }, status: { in: ["active", "scheduled"] } },
-      select: { ebayListingId: true, createdAt: true, updatedAt: true },
+      select: { ebayListingId: true },
     }),
   ]);
   const knownIds = new Set([
     ...knownEbay.map(l => l.ebayListingId!),
-    ...knownInternal
-      .filter(l => l.updatedAt.getTime() > l.createdAt.getTime() + 1000)
-      .map(l => l.ebayListingId!),
+    ...knownInternal.map(l => l.ebayListingId!),
   ]);
 
   // Parse <Item> blocks from the ActiveList section

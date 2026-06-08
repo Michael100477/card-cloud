@@ -42,7 +42,9 @@ const SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
   "https://api.ebay.com/oauth/api_scope/sell.account",
-  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+  "https://api.ebay.com/oauth/api_scope/sell.fulfillment",            // mark orders shipped
+  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",   // read order status
+  "https://api.ebay.com/oauth/api_scope/sell.logistics",              // quote + buy shipping labels
   "https://api.ebay.com/oauth/api_scope/commerce.message",
 ].join(" ");
 

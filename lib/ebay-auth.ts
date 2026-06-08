@@ -157,7 +157,11 @@ export async function getAccessToken(): Promise<string> {
     body: new URLSearchParams({
       grant_type:    "refresh_token",
       refresh_token: refreshToken,
-      scope:         SCOPES,
+      // NOTE: deliberately NOT passing scope here. eBay reuses whatever scopes
+      // were granted at the original OAuth handshake. Passing the current
+      // SCOPES list breaks when we've added scopes (e.g. sell.fulfillment
+      // write) that weren't on the refresh_token — eBay returns invalid_scope
+      // and every background monitor crashes in a loop.
     }),
   });
 

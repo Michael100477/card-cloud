@@ -124,6 +124,15 @@ App restarted; Mike now needs to re-authorize the eBay connection so a new acces
 
 Awaiting Mike's reconnect test on local. New workflow going forward: Mike works on Railway for production; local stays for dev/testing with this independent RuName so OAuth flows don't cross environments anymore. Mike asks me to verify changes before pushing to Railway; once verified locally, I push.
 
+**Iteration 14 (18:30):** Pivot — local code now shares Railway's production DB. Mike asked for "the dev site to have the same eBay data as the production site" automatically, no script. Migrated all 55 items + tokens + credentials from local Docker → Railway (483 rows total). Switched local's `DATABASE_URL` in `.env` to point at Railway. Local code reads/writes Railway directly now. The `_local` RuName + `ruNameCredKey` branch became dead code and was reverted in `lib/ebay-auth.ts`. Local-OAuth-stays-local was abandoned (eBay requires HTTPS for callback; localhost is HTTP). Both UIs (localhost:3001 PM2 and Railway-hosted) now read the same DB, so they're always in sync by construction. Tokens refreshed via reconnect; sync alive (`fetched 37 orders, updated 50 rows`). Pushed `9225e19` to clean up the dead code branch.
+
+**Iteration 15 (19:00):** Started EasyPost shipping integration.
+- Installed `@easypost/api` 8.8.0 via npm
+- Added 3 credential rows in `Shipping — EasyPost` group (Environment, Test Key, Production Key) + 9 rows in `Shipping — From Address` group (sender name, company, street1/2, city, state, zip, country, phone) in `app/admin/credentials/page.tsx`. SEED + GROUP_ORDER updated. 12 rows landed in Railway DB.
+- New `lib/easypost.ts` — `buyLabel({to, parcel, insuranceValue, preferredService})` returns `{labelUrl, trackingNumber, carrier, service, cost}`. Validates the ship-from address before calling; throws with a useful "fill in: City, ZIP…" message if anything's missing. Picks cheapest USPS rate by default; can target Ground Advantage / Priority / PriorityExpress if specified.
+- Rewrote `app/api/admin/shipping/[kind]/[id]/create-label/route.ts` to call `buyLabel` instead of eBay's Logistics API. The eBay `shipping_fulfillment` POST that notifies the buyer with tracking is kept at the end (non-fatal — if eBay-side notify fails the label is still saved and the admin can mark shipped in eBay's hub manually).
+- Awaiting Mike: fund EasyPost account (USPS rule, prepaid balance required) + paste Test/Production API keys + fill in ship-from address. Test mode works without funded postage if Mike wants to verify the integration flow first.
+
 ---
 
 ## 2026-06-08 12:25 — Diagnosed: ended auctions + paid auctions stranded by auto-demote gate

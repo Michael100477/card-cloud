@@ -53,6 +53,12 @@ const SCOPES = [
 
 // ── Build authorization URL ───────────────────────────────────────────────
 
+// Local dev shares Railway's database (DATABASE_URL → Railway). All eBay
+// OAuth flows therefore use the Railway-registered RuName regardless of
+// whether the user kicked off the flow from localhost or from Railway —
+// eBay redirects to Railway's callback, tokens land in Railway DB, and the
+// localhost UI just reads the same tokens.
+
 export async function buildAuthUrl(state: string, env?: "sandbox" | "production"): Promise<string | null> {
   const resolvedEnv = env ?? ((await getCred("ebay_environment")) as "sandbox" | "production") ?? "sandbox";
   const suffix   = resolvedEnv === "production" ? "_prod" : "";

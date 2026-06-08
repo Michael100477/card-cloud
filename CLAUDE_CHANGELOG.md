@@ -102,6 +102,28 @@ App restarted; Mike now needs to re-authorize the eBay connection so a new acces
 
 12 files changed, 1115+/92-. After Railway finishes auto-deploying (~2–3 min), Mike will revoke the app in his eBay account settings and reconnect to force a full fresh authorization with the new scope set.
 
+**Iteration 11 (16:55):** Reconnect on Railway returned `eBay connection error: invalid_scope`. eBay's `sell.logistics` scope is a Limited Release product — apps need explicit approval from eBay's Developer Program before they can request it. Without that approval, the whole OAuth handshake fails (eBay returns invalid_scope without specifying which one).
+
+**Fix pushed at 17:00, commit `e69a74c`** — removed `sell.logistics` from SCOPES, kept `sell.fulfillment` (standard) and the comment explaining the path forward. After Railway re-deploys, reconnect should succeed — but Create label will need an alternate path until Mike applies for Logistics API access OR we wire a third-party shipping integration.
+
+**Iteration 12 (17:20):** Mike shipped 6 items directly through eBay. After 5+ minutes they were still showing in Waiting to be Shipped on Card Cloud. Diagnosed:
+- Railway production DB is empty (0 rows) — Mike has been on local the whole time.
+- Local DB has the 6 paid items.
+- All 6 eBay Fulfillment API calls returned HTTP 401 — local's access_token is invalid.
+- Root cause: when Mike clicked Reconnect from local, eBay redirected the new token to Railway's callback (because `ebay_ru_name_prod` points to Railway). Railway's DB got the new tokens; local's token chain was broken by the re-auth and never updated.
+
+**Hack to unblock:** copied the 4 production eBay credentials (`ebay_access_token_prod`, `ebay_refresh_token_prod`, `ebay_token_expires_at_prod`, `ebay_seller_username_prod`) from Railway DB → local DB via a one-off pg script. Restarted pm2; syncOrders ran clean (`fetched 37 orders, updated 50 rows`). All 6 paid items moved to shipped; 10+ historical shipped orders also auto-imported. Status breakdown went from `1 active, 1 ended, 5 paid, 33 shipped, 5 sold` to `1 active, 1 ended, 0 paid, 50 shipped, 3 sold`.
+
+**Lifetime of the hack:** ~2 hours (until eBay's next token refresh). Proper fix requires either (a) registering a second `ru_name` with eBay pointing to localhost so local OAuth stays local, or (b) committing to Railway as the only "real" environment. Option (a) is queued; tackling after EasyPost is wired in.
+
+**Iteration 13 (17:40):** Mike chose (b) Railway-as-prod going forward AND registered a second RuName `Michael_Hayward-MichaelH-CardCl-tpzdeitky` for localhost. Wired up environment-aware RuName lookup:
+
+- `lib/ebay-auth.ts` — new helper `ruNameCredKey(suffix)` inspects `process.env.NEXTAUTH_URL` for "localhost"; returns `ebay_ru_name${suffix}_local` when true, else `ebay_ru_name${suffix}`. Both `buildAuthUrl` and `exchangeCode` call it.
+- Inserted `ebay_ru_name_prod_local` credential in local Docker DB with Mike's new RuName value.
+- Restart verified — local NEXTAUTH_URL is `http://localhost:3001`, so local OAuth will now stay on local. Railway's NEXTAUTH_URL doesn't contain "localhost", so it'll continue using the existing `ebay_ru_name_prod` — pushing this code is safe.
+
+Awaiting Mike's reconnect test on local. New workflow going forward: Mike works on Railway for production; local stays for dev/testing with this independent RuName so OAuth flows don't cross environments anymore. Mike asks me to verify changes before pushing to Railway; once verified locally, I push.
+
 ---
 
 ## 2026-06-08 12:25 — Diagnosed: ended auctions + paid auctions stranded by auto-demote gate

@@ -79,17 +79,18 @@ STYLE & TONE:
 - Short, punchy paragraphs — no walls of text
 - Make the value of the bundle clear ("X cards for one price")
 
-STRUCTURE:
+STRUCTURE — must include all six sections in this order:
 1. Opening hook — what kind of lot this is (rookies, vintage, mixed sport, specific player, etc.), total card count
-2. "📦 What's Included" section — list the cards the seller provided. Format as a clean bullet list. Include card count.
+2. "📦 What's Included" section — REQUIRED. Take every line from the seller's "Cards included in the lot" list and emit it as its own bullet point. Do not summarize, do not collapse multiple cards into one line, do not skip cards. If the seller listed 4 cards, the bullet list must have 4 bullets, one per card, with the seller's exact card text on each. Include the total card count above or below the list.
 3. "✨ Why This Lot" section — collector appeal. Specific players/sets that stand out, era significance, what makes this a good pickup
 4. "💎 Condition Notes" section — condition info if provided; otherwise say "See photos for condition details"
 5. "🔥 Great For" section — 3-4 bullets matching buyer types (PC builders, set builders, flippers, dealers)
 6. Closing line: "Ships fast and secure in a bubble mailer with cards in penny sleeves and top loaders or team bags for protection."
 
 RULES:
-- Use the cards the seller listed — do not invent or substitute cards
-- If a player or card is mentioned by the seller, you may briefly note their significance, but stick to facts
+- Reproduce the seller's card list VERBATIM in the "What's Included" section — one bullet per line they provided
+- Do not invent or substitute cards
+- If a player or card is mentioned by the seller, you may briefly note their significance in the "Why This Lot" section, but stick to facts
 - Total length ~300-500 words
 - Always include the total card count
 - Always end with the shipping line
@@ -146,6 +147,7 @@ export async function POST(req: NextRequest) {
     parallel?: string | null; features?: string[];
     cardName?: string | null; cardType?: string | null; cardSize?: string | null;
     countryOfOrigin?: string | null; upc?: string | null;
+    isLot?: boolean; cardCount?: number | null; lotContents?: string | null;
   };
 
   const loadedPhotos = (
@@ -190,8 +192,9 @@ export async function POST(req: NextRequest) {
   ].filter(Boolean).join("\n");
 
   const isLotListing = !!card.isLot && (card.cardCount ?? 0) > 0;
+  console.log(`[generate] phase=${phase} isLot=${card.isLot} cardCount=${card.cardCount} lotContentsLen=${card.lotContents?.length ?? 0} → isLotListing=${isLotListing}`);
   const lotSummary = isLotListing
-    ? `\n\nThis is a LOT listing of ${card.cardCount} cards. Cards included in the lot:\n${card.lotContents ?? "(seller did not list individual cards — describe based on photos and any details above)"}`
+    ? `\n\n========================================\nTHIS IS A LOT LISTING OF ${card.cardCount} CARDS.\n========================================\nThe seller provided the following list of cards included in this lot. Reproduce EVERY line below as its own bullet point in the "What's Included" section — do not summarize or skip any:\n\n${card.lotContents ?? "(seller did not list individual cards — describe based on photos and any details above)"}\n========================================`
     : "";
 
   const phaseInstruction = phase === "description"

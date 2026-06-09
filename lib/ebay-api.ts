@@ -397,16 +397,22 @@ function ebayCondition(
   condition: string | null,
   graded: boolean,
   conditionType?: string | null,
-  _cardCondition?: string | null,
+  cardCondition?: string | null,
+  isLot?: boolean,
 ): string {
   // eBay's Trading Card Singles category (261328) only accepts two conditions:
   //   Graded   → LIKE_NEW        (numeric 2750)
   //   Ungraded → USED_VERY_GOOD  (numeric 4000)
-  // Inventory API enum → numeric code mappings: LIKE_NEW=2750, USED_EXCELLENT=3000,
-  // USED_VERY_GOOD=4000, USED_GOOD=5000, USED_ACCEPTABLE=6000. The category rejects
-  // everything except 2750 and 4000 with errorId 25059.
-  void condition; void _cardCondition;
+  // Trading Card Lots category (183444) uses simpler condition IDs:
+  //   New      → NEW             (numeric 1000)
+  //   Used     → USED_GOOD       (numeric 5000)
+  // Inventory API enum → numeric code mappings: NEW=1000, LIKE_NEW=2750,
+  // USED_EXCELLENT=3000, USED_VERY_GOOD=4000, USED_GOOD=5000, USED_ACCEPTABLE=6000.
+  void condition;
   if (graded || conditionType === "graded") return "LIKE_NEW";
+  if (isLot) {
+    return cardCondition?.trim().toLowerCase() === "new" ? "NEW" : "USED_GOOD";
+  }
   return "USED_VERY_GOOD";
 }
 
@@ -414,7 +420,7 @@ function ebayCondition(
 // Required by category 261328 (Trading Card Singles). Returns [] if the category
 // doesn't require descriptors (eBay tolerates missing field then).
 async function resolveConditionDescriptors(
-  input: { categoryId?: string | null; sport?: string | null; graded?: boolean; conditionType?: string | null; cardCondition?: string | null; gradeCompany?: string | null; gradeCompanyEbay?: string | null },
+  input: { categoryId?: string | null; sport?: string | null; graded?: boolean; conditionType?: string | null; cardCondition?: string | null; gradeCompany?: string | null; gradeCompanyEbay?: string | null; isLot?: boolean },
   token: string,
   sandbox: boolean,
 ): Promise<{ name: string; values: string[] }[]> {
@@ -431,9 +437,30 @@ async function resolveConditionDescriptors(
   type ItemCondition = { conditionId?: string; conditionDescriptors?: Descriptor[] };
 
   const isGraded = input.graded || input.conditionType === "graded";
-  const targetConditionId = isGraded ? "2750" : "4000";
+  const isLot    = input.isLot === true;
+  const cardCondLower = (input.cardCondition ?? "").trim().toLowerCase();
+
+  // Pick the right inventory conditionId based on listing mode:
+  //   Graded single → 2750 (LIKE_NEW)
+  //   Lot, "New"    → 1000 (NEW)
+  //   Lot, "Used"   → 5000 (USED_GOOD)
+  //   Ungraded sin. → 4000 (USED_VERY_GOOD)
+  let targetConditionId: string;
+  if (isGraded) targetConditionId = "2750";
+  else if (isLot) targetConditionId = cardCondLower === "new" ? "1000" : "5000";
+  else targetConditionId = "4000";
+
   const allConditions: ItemCondition[] = policyData?.itemConditionPolicies?.[0]?.itemConditions ?? [];
-  const itemCondition = allConditions.find(c => c.conditionId === targetConditionId);
+  // Try the exact target conditionId first. If the category doesn't have
+  // descriptors there (some lot categories), fall back to any itemCondition
+  // that has a 40001 descriptor — the value catalog is the same across
+  // condition IDs for a given category.
+  let itemCondition = allConditions.find(c => c.conditionId === targetConditionId);
+  if (!itemCondition || !itemCondition.conditionDescriptors?.length) {
+    itemCondition = allConditions.find(c =>
+      c.conditionDescriptors?.some(d => d.conditionDescriptorId === "40001")
+    );
+  }
   const descriptors = itemCondition?.conditionDescriptors ?? [];
 
   const result: { name: string; values: string[] }[] = [];
@@ -444,10 +471,19 @@ async function resolveConditionDescriptors(
 
     let valueId: string | undefined;
     if (dId === "40001") {
-      const wantPrefix = (input.cardCondition ?? "Excellent").trim().toLowerCase().split(" ")[0];
-      valueId = d.conditionDescriptorValues?.find(v =>
-        (v.conditionDescriptorValueName ?? "").toLowerCase().startsWith(wantPrefix)
-      )?.conditionDescriptorValueId;
+      if (isLot) {
+        // Lot values are simple: New / Used. Match exactly (case-insensitive),
+        // not by prefix, so "Used" doesn't accidentally hit "Used (heavy wear)".
+        const want = cardCondLower || "used";
+        valueId = d.conditionDescriptorValues?.find(v =>
+          (v.conditionDescriptorValueName ?? "").toLowerCase() === want
+        )?.conditionDescriptorValueId;
+      } else {
+        const wantPrefix = (input.cardCondition ?? "Excellent").trim().toLowerCase().split(" ")[0];
+        valueId = d.conditionDescriptorValues?.find(v =>
+          (v.conditionDescriptorValueName ?? "").toLowerCase().startsWith(wantPrefix)
+        )?.conditionDescriptorValueId;
+      }
     } else if (dId === "27501") {
       const wantGrader = (input.gradeCompanyEbay ?? input.gradeCompany ?? "").trim().toLowerCase();
       if (wantGrader) {
@@ -459,7 +495,7 @@ async function resolveConditionDescriptors(
     valueId = valueId ?? d.conditionDescriptorConstraint?.defaultConditionDescriptorValueId;
     if (valueId) result.push({ name: dId, values: [valueId] });
   }
-  console.log("[ebay] resolveConditionDescriptors:", isGraded ? "Graded" : "Ungraded", "→", JSON.stringify(result));
+  console.log("[ebay] resolveConditionDescriptors:", isGraded ? "Graded" : isLot ? `Lot/${input.cardCondition}` : "Ungraded", "→", JSON.stringify(result));
   return result;
 }
 
@@ -771,7 +807,7 @@ export async function createEbayListing(input: EbayListingInput): Promise<{
     const aspects = buildAspects(input);
 
     // 4. Create inventory item — always delete first to clear any stale eBay associations
-    const condition = ebayCondition(input.condition, input.graded, input.conditionType, input.cardCondition);
+    const condition = ebayCondition(input.condition, input.graded, input.conditionType, input.cardCondition, input.isLot);
 
     const conditionDescriptors = await resolveConditionDescriptors(input, token, sandbox);
     const inventoryPayload = {
@@ -918,7 +954,7 @@ export async function reviseEbayListing(input: EbayListingInput): Promise<{ ok: 
     console.log(`[ebay] revise photos: ${uploadedPhotos.length}/${input.photos.length} uploaded`);
 
     // 2. Update inventory item (no delete — listing is live)
-    const condition = ebayCondition(input.condition, input.graded, input.conditionType, input.cardCondition);
+    const condition = ebayCondition(input.condition, input.graded, input.conditionType, input.cardCondition, input.isLot);
     const aspects   = buildAspects(input);
     const conditionDescriptors = await resolveConditionDescriptors(input, token, sandbox);
     console.log(`[ebay] revise: updating inventory item sku=${input.sku}`);

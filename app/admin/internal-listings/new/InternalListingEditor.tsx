@@ -494,6 +494,18 @@ export function InternalListingEditor({
 
   // ── generateListing ────────────────────────────────────────────────────────
   async function generateListing() {
+    // Client-side validation for lot listings — the AI prompt depends on the
+    // seller's card list, and an empty list produces unparseable output.
+    if (isLot) {
+      if (!cardCount || parseInt(cardCount, 10) < 2) {
+        patchDraft({ error: "Lot listings need a Number of Cards (≥ 2)." });
+        return;
+      }
+      if (!lotContents.trim()) {
+        patchDraft({ error: "Please list the cards included in the lot before generating." });
+        return;
+      }
+    }
     patchDraft({ generating: true, error: "" });
     const cardData = buildCardData();
     try {

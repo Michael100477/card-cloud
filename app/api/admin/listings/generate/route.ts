@@ -192,9 +192,12 @@ export async function POST(req: NextRequest) {
   ].filter(Boolean).join("\n");
 
   const isLotListing = !!card.isLot && (card.cardCount ?? 0) > 0;
-  console.log(`[generate] phase=${phase} isLot=${card.isLot} cardCount=${card.cardCount} lotContentsLen=${card.lotContents?.length ?? 0} → isLotListing=${isLotListing}`);
+  const trimmedLotContents = card.lotContents?.trim() || "";
+  console.log(`[generate] phase=${phase} isLot=${card.isLot} cardCount=${card.cardCount} lotContentsLen=${trimmedLotContents.length} → isLotListing=${isLotListing}`);
   const lotSummary = isLotListing
-    ? `\n\n========================================\nTHIS IS A LOT LISTING OF ${card.cardCount} CARDS.\n========================================\nThe seller provided the following list of cards included in this lot. Reproduce EVERY line below as its own bullet point in the "What's Included" section — do not summarize or skip any:\n\n${card.lotContents ?? "(seller did not list individual cards — describe based on photos and any details above)"}\n========================================`
+    ? trimmedLotContents
+      ? `\n\n========================================\nTHIS IS A LOT LISTING OF ${card.cardCount} CARDS.\n========================================\nThe seller provided the following list of cards included in this lot. Reproduce EVERY line below as its own bullet point in the "What's Included" section — do not summarize or skip any:\n\n${trimmedLotContents}\n========================================`
+      : `\n\n========================================\nTHIS IS A LOT LISTING OF ${card.cardCount} CARDS.\n========================================\nThe seller did not list individual cards. Describe the lot in general terms based on the photos and the other card details (sport, era, featured player, etc.). For the "What's Included" section, describe the lot as a whole ("${card.cardCount} cards from the [era/sport]"). Do NOT list specific card names.\n========================================`
     : "";
 
   const phaseInstruction = phase === "description"

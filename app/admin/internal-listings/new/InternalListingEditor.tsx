@@ -230,7 +230,12 @@ export function InternalListingEditor({
   const [lotContents, setLotContents] = useState<string>(e?.lotContents ?? "");
   function setIsLot(next: boolean) {
     _setIsLot(next);
-    patchDraft({ categoryId: next ? "261329" : "261328" });
+    patchDraft({
+      categoryId: next ? "261329" : "261328",
+      // Lots ship in a larger envelope/box than singles. 11x6x1 is the typical
+      // size for a small/medium card lot in a bubble mailer.
+      ...(next ? { dimLength: "11.0", dimWidth: "6.0", dimHeight: "1.0" } : {}),
+    });
   }
 
   // Listing form state — pre-populated from existing listing if editing
@@ -367,9 +372,16 @@ export function InternalListingEditor({
       // single-card identification (player/year/etc. will be empty so the user
       // can describe the lot as a whole).
       if (c.isLot || (typeof c.cardCount === "number" && c.cardCount >= 2)) {
-        patchDraft({ categoryId: "261329" });   // Sports Trading Cards > Trading Card Lots
+        patchDraft({
+          categoryId: "261329",                // Sports Trading Cards > Trading Card Lots
+          dimLength:  "11.0",                  // lot-specific package defaults — fit
+          dimWidth:   "6.0",                   //   typical bubble mailer
+          dimHeight:  "1.0",
+        });
+        _setIsLot(true);                       // also flip the manual toggle on
+        if (typeof c.cardCount === "number") setCardCount(String(c.cardCount));
         if (c.sport) setSport(c.sport);
-        if (c.set)   setSet(c.set);             // optional: useful if all cards are same set
+        if (c.set)   setSet(c.set);            // optional: useful if all cards are same set
         setScanMsg(`✓ Detected a lot of ${c.cardCount ?? "multiple"} cards — category set to Trading Card Lots. Fill in the rest manually.`);
         return;
       }

@@ -1360,7 +1360,16 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
             </div>
             <select value={draft.categoryId} onChange={e => onPatch({ categoryId: e.target.value })} className={si + " bg-white"}>
               <option value=""></option>
-              {categories.map(c => <option key={c.label} value={c.id}>{c.label} ({c.id})</option>)}
+              {/* If the current categoryId isn't in the loaded categories list
+                  (e.g. set via the lot toggle to 183444 before eBay's API
+                  responds, or set to a leaf the API doesn't surface), show a
+                  synthetic option so the select still displays it. */}
+              {draft.categoryId && !categories.some(c => c.id === draft.categoryId) && (
+                <option value={draft.categoryId}>
+                  {draft.categoryId === "183444" ? "Trading Card Lots" : `Category #${draft.categoryId}`} ({draft.categoryId})
+                </option>
+              )}
+              {categories.map(c => <option key={c.id} value={c.id}>{c.label} ({c.id})</option>)}
             </select>
           </div>
         ));

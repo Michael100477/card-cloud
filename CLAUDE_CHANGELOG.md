@@ -5,6 +5,55 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-06-09 — EasyPost shipping label integration (Card Cloud-native label buying)
+
+**Why:** eBay Sell Logistics API turned out to be a Limited Release product (Mike got `invalid_scope` even after requesting access). Picked EasyPost as the replacement — Auctane's modern REST API, same USPS Commercial Plus rates as Stamps.com, $0.01 per label, pay-as-you-go.
+
+**What landed:**
+
+1. **`@easypost/api` 8.8.0** added as a dependency.
+2. **`lib/easypost.ts`** — wraps the EasyPost SDK with three primary helpers:
+   - `getShipFromAddress()` — reads ship-from credential rows (sender name, street, city, state, zip, country, phone) and throws a friendly "fill in: …" error if anything's missing.
+   - `getRates(input)` — creates an EasyPost shipment, returns `{ shipmentId, rates[] }` with USPS rates sorted cheapest-first.
+   - `buyRate(shipmentId, rateId)` — buys a specific rate, returns `{ labelUrl, trackingNumber, carrier, service, cost }`.
+   - `buyLabel(input)` — one-shot helper kept for the eBay-order Create-Label flow.
+   - `carrierCodeForEbay(carrier)` — maps EasyPost carrier names to the codes eBay's Fulfillment API expects.
+3. **Admin → API Keys** picked up two new credential groups:
+   - **Shipping — EasyPost** (Environment toggle, Test Key, Production Key).
+   - **Shipping — From Address** (Sender Name, Company, Street 1/2, City, State, ZIP, Country, Phone).
+4. **Environment toggle is a real slider** — no Edit/Save/Cancel cycle, click-to-flip auto-saves. **test** (gray, default) ↔ **production** (red, "⚠ real money"). New `saveValue(service,label,value)` helper added to `CredentialsClient.tsx` so any future inline control can call it directly.
+5. **`POST /api/admin/shipping/standalone`** — two-mode endpoint. Body without `shipmentId+rateId` → returns rates (no charge). Body with `shipmentId+rateId` → buys that rate.
+6. **`/admin/shipping/new`** — three-phase form (form → quote → bought):
+   - Form collects recipient + parcel; click **Get rates** (no charge).
+   - Quote phase shows shipment summary + radio-button list of USPS services with prices and estimated delivery days (cheapest pre-selected). Buy button shows the exact price — `Buy label · $4.13`.
+   - Bought phase shows tracking + carrier + service + cost + Print and "Open raw label" links.
+7. **`/print/label`** route — lives OUTSIDE `/admin/` so it doesn't inherit the admin sidebar. CSS lays the 4×6 PNG label landscape (rotated 90°) on the page, dialed in for Mike's specific label paper: top: 0.75in (5.5"-tall sticky portion + 4"-tall label = 0.75" equal margins on top and bottom). Print dialog auto-opens once the image loads. Single sheet output (overflow: hidden on the print page so the rotated image's CSS bounding box doesn't trigger a second page).
+8. **`/admin/shipping/[kind]/[id]/create-label`** rewritten to call `buyLabel()` instead of eBay's Logistics API, with the existing eBay Fulfillment POST kept at the end so the buyer still gets a tracking notification from eBay regardless of where the label was purchased.
+9. **"+ Create new label"** button added to the existing `/admin/shipping` page so the standalone flow is discoverable.
+
+**Token refresh fix (bonus, shipped earlier today as `4643296`):** `lib/ebay-auth.ts` was passing the current SCOPES list on token refresh — when we added `sell.fulfillment` write to SCOPES, the existing refresh_token didn't have it and eBay rejected every refresh with `invalid_scope`. The background monitors (ebay-message-monitor, ebay-feedback-monitor) crashed in a loop, taking the site down. Standard OAuth fix: don't pass `scope` on refresh, eBay reuses the originally granted scopes. Already pushed to Railway.
+
+**Topology change earlier today:** local `DATABASE_URL` was switched to point directly at Railway production Postgres. Both UIs (`localhost:3001` and the Railway-hosted Card Cloud) share one database — no sync scripts, no manual data refresh. Old Docker Postgres on `:5433` is kept as a dormant rescue fallback.
+
+**Files added:**
+- `lib/easypost.ts`
+- `app/admin/shipping/new/page.tsx`
+- `app/admin/shipping/new/StandaloneLabelClient.tsx`
+- `app/api/admin/shipping/standalone/route.ts`
+- `app/print/label/page.tsx`
+- `app/print/label/PrintLabelClient.tsx`
+
+**Files modified:**
+- `app/admin/credentials/page.tsx` (SEED + GROUP_ORDER)
+- `app/admin/credentials/CredentialsClient.tsx` (inline-toggle render + saveValue helper)
+- `app/admin/shipping/ShippingClient.tsx` ("+ Create new label" button)
+- `app/api/admin/shipping/[kind]/[id]/create-label/route.ts` (EasyPost-backed)
+- `package.json` / `package-lock.json` (+ `@easypost/api`)
+
+**Mike's verification:** standalone label flow worked end-to-end — test label printed correctly on the bottom-half sticky portion of his label paper after 4 rounds of CSS tuning (vertical/landscape rotation, top-vs-bottom page positioning for his printer's paper-feed direction, and final margin set to 0.75").
+
+---
+
 ## 2026-06-08 12:55 — Mirror-eBay fix: auto-import unmatched orders + repair gates and filters
 
 **Request:** Mike's framing — "The orders on the site should mimic what eBay shows me. It shouldn't matter where I list them." Card Cloud's eBay Listings page must mirror eBay 1:1, regardless of whether a listing started inside Card Cloud or directly on eBay.

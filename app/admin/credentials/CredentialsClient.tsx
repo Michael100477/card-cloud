@@ -42,17 +42,23 @@ export function CredentialsClient({ groups: initialGroups, allGroupNames: initia
   }
 
   async function saveEdit(service: string, label: string) {
+    await saveValue(service, label, draft[service] ?? "");
+    setEditing(e => ({ ...e, [service]: false }));
+  }
+
+  /** Save a value directly without going through the edit/draft flow. Used by
+   *  inline controls like the EasyPost env toggle that don't need an explicit
+   *  Edit / Save / Cancel cycle. */
+  async function saveValue(service: string, label: string, value: string) {
     setSaving(service);
     await fetch("/api/admin/credentials", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ service, label, value: draft[service] ?? "" }),
+      body: JSON.stringify({ service, label, value }),
     });
-    // Update value in local state
     setGroups(prev => prev.map(g => ({
       ...g,
-      items: g.items.map(i => i.service === service ? { ...i, value: draft[service] ?? "" } : i),
+      items: g.items.map(i => i.service === service ? { ...i, value } : i),
     })));
-    setEditing(e => ({ ...e, [service]: false }));
     setSaved(s => ({ ...s, [service]: true }));
     setTimeout(() => setSaved(s => ({ ...s, [service]: false })), 2000);
     setSaving(null);
@@ -255,6 +261,7 @@ export function CredentialsClient({ groups: initialGroups, allGroupNames: initia
                 const hasValue   = !!item.value;
                 const isSaving   = saving  === item.service;
                 const isDeleting = deleting === item.service;
+                const isInlineToggle = item.service === "easypost_environment";
 
                 return (
                   <div key={item.service} className="px-5 py-3.5 flex items-start gap-4">
@@ -264,13 +271,28 @@ export function CredentialsClient({ groups: initialGroups, allGroupNames: initia
                         {item.auto && (
                           <span className="text-xs bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded">auto</span>
                         )}
-                        {hasValue && !isEditing && (
+                        {hasValue && !isEditing && !isInlineToggle && (
                           <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">set</span>
                         )}
                         {saved[item.service] && <span className="text-xs text-green-600">✓ Saved</span>}
                       </div>
 
-                      {isEditing ? (
+                      {isInlineToggle ? (() => {
+                        const env = item.value || "test";
+                        const isProd = env === "production";
+                        const flip = () => saveValue(item.service, item.label, isProd ? "test" : "production");
+                        return (
+                          <div className="flex items-center gap-3 mt-1.5">
+                            <span className={`text-sm font-mono ${!isProd ? "text-navy font-semibold" : "text-slate-400"}`}>test</span>
+                            <button type="button" onClick={flip} disabled={isSaving} aria-label={`Switch to ${isProd ? "test" : "production"}`}
+                              className={`relative w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${isProd ? "bg-red-500" : "bg-slate-300"}`}>
+                              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${isProd ? "translate-x-5" : ""}`} />
+                            </button>
+                            <span className={`text-sm font-mono ${isProd ? "text-red-600 font-semibold" : "text-slate-400"}`}>production</span>
+                            {isProd && <span className="text-xs text-red-600">⚠ real money</span>}
+                          </div>
+                        );
+                      })() : isEditing ? (
                         <div className="flex items-center gap-2 mt-1.5">
                           {item.service === "ebay_environment" ? (
                             <select
@@ -304,8 +326,8 @@ export function CredentialsClient({ groups: initialGroups, allGroupNames: initia
                       )}
                     </div>
 
-                    {/* Set + Delete — always visible */}
-                    {!isEditing && (
+                    {/* Set + Delete — hidden for inline-toggle fields (no separate edit step) */}
+                    {!isEditing && !isInlineToggle && (
                       <div className="flex items-center gap-3 shrink-0 mt-0.5">
                         <button onClick={() => startEdit(item.service, item.value)}
                           className="text-brand text-xs font-medium hover:underline">

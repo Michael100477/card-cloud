@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface Address {
   street1?: string; street2?: string; city?: string;
@@ -71,14 +72,20 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter tabs */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-        {(["ready", "shipped"] as const).map(t => (
-          <button key={t} onClick={() => setFilter(t)}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filter === t ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
-            {t === "ready" ? `Ready to ship (${rows.filter(r => r.status === "paid").length})` : `Shipped (${rows.filter(r => r.status === "shipped").length})`}
-          </button>
-        ))}
+      {/* Filter tabs + new-label button */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+          {(["ready", "shipped"] as const).map(t => (
+            <button key={t} onClick={() => setFilter(t)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${filter === t ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
+              {t === "ready" ? `Ready to ship (${rows.filter(r => r.status === "paid").length})` : `Shipped (${rows.filter(r => r.status === "shipped").length})`}
+            </button>
+          ))}
+        </div>
+        <Link href="/admin/shipping/new"
+          className="bg-brand text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors whitespace-nowrap">
+          + Create new label
+        </Link>
       </div>
 
       {filtered.length === 0 ? (

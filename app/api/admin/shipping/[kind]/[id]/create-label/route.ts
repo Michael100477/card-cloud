@@ -3,18 +3,15 @@ import { requireAdmin, AdminError } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
 import { logger } from "@/lib/logger";
+import { buyLabel, carrierCodeForEbay } from "@/lib/easypost";
 
 /**
- * Create a shipping label for a paid order via eBay's Sell Logistics API.
- * Flow:
- *   1. POST /sell/logistics/v1/shipping_quote  → returns a list of carrier/service options
- *   2. POST /sell/logistics/v1/shipment        → buys the label using the cheapest option
- *      (prefers eBay Standard Envelope when item ≤ $50 and US destination)
- *   3. Save label URL + tracking number; flip status → shipped
+ * Create a shipping label for a paid order. Two-step flow:
+ *   1. Buy the label via EasyPost (USPS Commercial Plus rates)
+ *   2. Tell eBay the order is fulfilled (so eBay emails the buyer with tracking)
  *
- * Heads up: eBay's Logistics API requires the seller's eBay account to be linked to a
- * Managed Payments balance with sufficient funds. The first call may also require enabling
- * shipping label purchasing in the eBay seller dashboard.
+ * Step 2 fails non-fatally — the label is still saved locally even if eBay
+ * notification couldn't be sent; the admin can mark shipped manually later.
  */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ kind: string; id: string }> }) {
   try { await requireAdmin(); } catch (e) {
@@ -38,17 +35,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
   type Addr = { street1?: string; street2?: string; city?: string; state?: string; postalCode?: string; country?: string };
   const addr = record.buyerAddress as Addr;
 
-  const status = await getEbayConnectionStatus();
-  if (!status.connected) return NextResponse.json({ error: "eBay account not connected" }, { status: 400 });
-  let token: string;
-  try { token = await getAccessToken(); }
-  catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
-  const sandbox = status.environment !== "production";
-  const apiBase = sandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
-
-  // Package dimensions — use the listing's saved values; only InternalListing has these
-  // as columns. For consignment, fall back to standard trading-card defaults.
-  // Type the optional package fields so TypeScript knows about them on consignment rows.
+  // Package dimensions — only InternalListing has these as columns; consignment
+  // falls back to standard trading-card defaults.
   type PkgFields = { weightLbs?: number; weightOz?: number | unknown; dimLength?: number | unknown; dimWidth?: number | unknown; dimHeight?: number | unknown };
   const rec = record as typeof record & PkgFields;
   const weightLbs = rec.weightLbs ?? 0;
@@ -56,106 +44,95 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
   const dimLength = Number(rec.dimLength ?? 11);
   const dimWidth  = Number(rec.dimWidth  ?? 6);
   const dimHeight = Number(rec.dimHeight ?? 1);
+  const totalOz   = weightLbs * 16 + weightOz;
 
-  const soldPrice = record.soldPrice ? Number(record.soldPrice) : 0;
-
-  // 2. Request a shipping quote from eBay
-  const quoteBody = {
-    accountCurrency: "USD",
-    packageSpecification: {
-      dimensions: { length: dimLength, width: dimWidth, height: dimHeight, unit: "INCH" },
-      weight:     { value: weightLbs * 16 + weightOz, unit: "OUNCE" },
-    },
-    shipFrom: {
-      // eBay pulls the actual return address from the seller account; we just need a hint.
-      contactAddress: { postalCode: "00000", countryCode: "US" }, // overridden by account
-    },
-    shipTo: {
-      contactAddress: {
-        addressLine1:    addr.street1 ?? "",
-        addressLine2:    addr.street2 ?? undefined,
-        city:            addr.city ?? "",
-        stateOrProvince: addr.state ?? "",
-        postalCode:      addr.postalCode ?? "",
-        countryCode:     addr.country ?? "US",
+  // 2. Buy label via EasyPost
+  let label: Awaited<ReturnType<typeof buyLabel>>;
+  try {
+    label = await buyLabel({
+      to: {
+        name:    record.buyerName    ?? record.buyerUsername ?? "Buyer",
+        street1: addr.street1        ?? "",
+        street2: addr.street2        || undefined,
+        city:    addr.city           ?? "",
+        state:   addr.state          ?? "",
+        zip:     addr.postalCode     ?? "",
+        country: addr.country        ?? "US",
       },
-    },
-  };
-  const quoteR = await fetch(`${apiBase}/sell/logistics/v1/shipping_quote`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(quoteBody),
-  });
-  const quoteData = await quoteR.json().catch(() => ({}));
-  if (!quoteR.ok) {
-    logger.error({ category: "ebay", action: "ebay.label.quote.failed", message: `Shipping quote failed: ${quoteR.status}`, data: { quoteData } });
-    return NextResponse.json({
-      error: `Shipping quote failed (${quoteR.status}): ${quoteData?.errors?.[0]?.message ?? JSON.stringify(quoteData).slice(0, 250)}`,
-    }, { status: 500 });
+      parcel: { length: dimLength, width: dimWidth, height: dimHeight, weight: totalOz },
+      insuranceValue: record.soldPrice ? Number(record.soldPrice) : undefined,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.error({ category: "shipping", action: "shipping.label.buy.failed", message: msg });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  // 3. Pick the right rate
-  // Prefer eBay Standard Envelope (eligible: trading cards ≤ $50, US destination).
-  type Rate = { rateId: string; shippingCarrierCode?: string; shippingServiceCode?: string; baseShippingCost?: { value: string; currency: string } };
-  const rates: Rate[] = quoteData.rates ?? [];
-  const isUS = (addr.country ?? "US") === "US";
-  const eseEligible = soldPrice <= 50 && isUS;
-  const ese = rates.find(r => /ENVELOPE/i.test(r.shippingServiceCode ?? ""));
-  const cheapest = [...rates].sort((a, b) => parseFloat(a.baseShippingCost?.value ?? "999") - parseFloat(b.baseShippingCost?.value ?? "999"))[0];
-  const chosen = (eseEligible && ese) ? ese : cheapest;
-  if (!chosen) {
-    return NextResponse.json({ error: "eBay returned no shipping rates for this address/package." }, { status: 500 });
-  }
-
-  // 4. Create the shipment (buy the label)
-  const shipmentBody = {
-    rateId: chosen.rateId,
-    labelCustomMessage: `Card Cloud — eBay order ${record.ebayOrderId}`,
-  };
-  const shipR = await fetch(`${apiBase}/sell/logistics/v1/shipment`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(shipmentBody),
-  });
-  const shipData = await shipR.json().catch(() => ({}));
-  if (!shipR.ok) {
-    logger.error({ category: "ebay", action: "ebay.label.create.failed", message: `Label create failed: ${shipR.status}`, data: { shipData, chosen } });
-    return NextResponse.json({
-      error: `Label creation failed (${shipR.status}): ${shipData?.errors?.[0]?.message ?? JSON.stringify(shipData).slice(0, 250)}`,
-    }, { status: 500 });
-  }
-
-  const labelUrl       = shipData.labelDownloadUrl ?? null;
-  const trackingNumber = shipData.trackingNumber   ?? shipData.shipmentTrackingNumber ?? null;
-
-  // 5. Save back to DB and flip status to shipped
+  // 3. Save back to DB and flip status to shipped
   const updateData = {
-    status: "shipped",
-    shippedAt: new Date(),
-    shippingLabelUrl: labelUrl,
-    trackingNumber,
+    status:           "shipped" as const,
+    shippedAt:        new Date(),
+    shippingLabelUrl: label.labelUrl,
+    trackingNumber:   label.trackingNumber,
+    shippingCarrier:  label.carrier,
   };
   if (kind === "internal") await db.internalListing.update({ where: { id }, data: updateData });
   else                     await db.ebayListing.update({ where: { id }, data: updateData });
 
-  // 6. Tell eBay the order is fulfilled (this notifies the buyer)
-  if (record.ebayOrderId && trackingNumber) {
-    await fetch(`${apiBase}/sell/fulfillment/v1/order/${record.ebayOrderId}/shipping_fulfillment`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        lineItems: [],   // empty = all line items on the order
-        trackingNumber,
-        shippingCarrierCode: chosen.shippingCarrierCode,
-      }),
-    }).catch(() => null);
+  // 4. Tell eBay the order is fulfilled (this notifies the buyer with tracking).
+  // Non-fatal — if this fails the label is already saved and admin can paste
+  // the tracking number into eBay's seller hub manually.
+  const ebayStatus = await getEbayConnectionStatus();
+  let ebayNotified = false;
+  let ebayWarning: string | null = null;
+  if (ebayStatus.connected && record.ebayOrderId) {
+    try {
+      const token = await getAccessToken();
+      const apiBase = ebayStatus.environment === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
+      const r = await fetch(`${apiBase}/sell/fulfillment/v1/order/${record.ebayOrderId}/shipping_fulfillment`, {
+        method:  "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lineItems: [],   // empty = all line items on the order
+          trackingNumber:      label.trackingNumber,
+          shippingCarrierCode: carrierCodeForEbay(label.carrier),
+        }),
+      });
+      if (r.ok) ebayNotified = true;
+      else {
+        const body = await r.text();
+        ebayWarning = `eBay fulfillment POST returned ${r.status}: ${body.slice(0, 150)}`;
+        logger.warn({ category: "shipping", action: "shipping.ebay.notify.failed", message: ebayWarning });
+      }
+    } catch (e) {
+      ebayWarning = `eBay fulfillment POST threw: ${e instanceof Error ? e.message : String(e)}`;
+      logger.warn({ category: "shipping", action: "shipping.ebay.notify.failed", message: ebayWarning });
+    }
   }
 
   logger.info({
-    category: "ebay", action: "ebay.label.created",
-    message: `Shipping label created via ${chosen.shippingServiceCode}: ${trackingNumber}`,
-    data: { ebayOrderId: record.ebayOrderId, labelUrl, trackingNumber, cost: chosen.baseShippingCost?.value },
+    category: "shipping",
+    action:   "shipping.label.created",
+    message:  `Shipping label created via EasyPost: ${label.trackingNumber}`,
+    data: {
+      ebayOrderId:  record.ebayOrderId,
+      labelUrl:     label.labelUrl,
+      trackingNumber: label.trackingNumber,
+      carrier:      label.carrier,
+      service:      label.service,
+      cost:         label.cost,
+      ebayNotified,
+    },
   });
 
-  return NextResponse.json({ ok: true, labelUrl, trackingNumber, service: chosen.shippingServiceCode });
+  return NextResponse.json({
+    ok:               true,
+    labelUrl:         label.labelUrl,
+    trackingNumber:   label.trackingNumber,
+    carrier:          label.carrier,
+    service:          label.service,
+    cost:             label.cost,
+    ebayNotified,
+    ebayWarning,
+  });
 }

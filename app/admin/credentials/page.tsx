@@ -57,6 +57,21 @@ const SEED: { service: string; label: string; group: string; hint?: string; auto
   { service: "ebay_free_shipping_policy_id_prod", label: "Free Shipping Policy ID", group: "eBay — Production", auto: true },
   { service: "ebay_return_policy_id_prod",        label: "Return Policy ID",        group: "eBay — Production", auto: true },
   { service: "ebay_payment_policy_id_prod",       label: "Payment Policy ID",       group: "eBay — Production", auto: true },
+  // Shipping — EasyPost (used by the Create Label flow on /admin/shipping)
+  { service: "easypost_environment", label: "Environment",         group: "Shipping — EasyPost", hint: "test or production" },
+  { service: "easypost_test_key",    label: "Test API Key",        group: "Shipping — EasyPost", hint: "EZTK_... (from app.easypost.com → API Keys)" },
+  { service: "easypost_prod_key",    label: "Production API Key",  group: "Shipping — EasyPost", hint: "EZAK_..." },
+  // Ship-from address — required on every label EasyPost prints. One address
+  // is used for all outbound shipments (Mike's home/warehouse).
+  { service: "shipfrom_name",     label: "Sender Name",        group: "Shipping — From Address", hint: "Person or business name on the return label" },
+  { service: "shipfrom_company",  label: "Company (optional)", group: "Shipping — From Address" },
+  { service: "shipfrom_street1",  label: "Street 1",           group: "Shipping — From Address" },
+  { service: "shipfrom_street2",  label: "Street 2 (optional)", group: "Shipping — From Address" },
+  { service: "shipfrom_city",     label: "City",               group: "Shipping — From Address" },
+  { service: "shipfrom_state",    label: "State (2-letter)",   group: "Shipping — From Address", hint: "e.g. CT" },
+  { service: "shipfrom_zip",      label: "ZIP",                group: "Shipping — From Address" },
+  { service: "shipfrom_country",  label: "Country",            group: "Shipping — From Address", hint: "US" },
+  { service: "shipfrom_phone",    label: "Phone",              group: "Shipping — From Address", hint: "Some carriers require this — your contact phone" },
   // Storage
   { service: "r2_account_id",  label: "Cloudflare R2 Account ID", group: "Storage", hint: "32-char hex string from R2 bucket's S3 API URL" },
   { service: "r2_access_key",  label: "R2 Access Key ID",         group: "Storage" },
@@ -78,8 +93,10 @@ const SEED: { service: string; label: string; group: string; hint?: string; auto
 
 // Canonical group order — predefined groups appear in this order on the page
 const GROUP_ORDER = [
-  "Email", "Payments", "Grading APIs", "Social Auth",
-  "Marketplace — eBay", "eBay — Sandbox", "eBay — Production", "Storage", "AI / ML", "Twilio",
+  "Email — SMTP", "Payments", "Grading APIs", "Social Auth",
+  "Marketplace — eBay", "eBay — Sandbox", "eBay — Production",
+  "Shipping — EasyPost", "Shipping — From Address",
+  "Storage", "AI / ML", "Article API", "Twilio",
   "Internal — Auto-managed",
 ];
 

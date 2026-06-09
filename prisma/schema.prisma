@@ -840,6 +840,9 @@ model InternalListing {
   // (183444) and exposes a Number of Cards input.
   isLot              Boolean   @default(false)
   cardCount          Int?
+  // Freeform list of cards included in the lot. Used by the description
+  // generator to write a lot-style description rather than a single-card one.
+  lotContents        String?   @db.Text
 
   // Status & eBay
   // Status flow: draft → active → sold → paid → shipped | ended | scheduled

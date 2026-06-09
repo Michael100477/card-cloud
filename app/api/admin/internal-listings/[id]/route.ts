@@ -122,6 +122,7 @@ export async function PATCH(
   if ("eventTournament" in body) data.eventTournament = body.eventTournament;
   if ("isLot"           in body) data.isLot           = body.isLot;
   if ("cardCount"       in body) data.cardCount       = body.cardCount;
+  if ("lotContents"     in body) data.lotContents     = body.lotContents;
 
   const updated = await db.internalListing.update({ where: { id }, data });
   return NextResponse.json({ id: updated.id });

@@ -70,6 +70,33 @@ RULES:
 OUTPUT — return ONLY this JSON, nothing else:
 {"description":"string — full emoji-rich description with section headers and bullet points"}`;
 
+const LOT_DESCRIPTION_SYSTEM = `You are an expert eBay trading card seller writing the description for a LOT of multiple cards (Trading Card Lots category). The buyer is purchasing a bundle, not a single card.
+
+STYLE & TONE:
+- Enthusiastic, collector-to-collector voice
+- Use emojis liberally for section headers and emphasis
+- Bullet points work well for listing what's included
+- Short, punchy paragraphs — no walls of text
+- Make the value of the bundle clear ("X cards for one price")
+
+STRUCTURE:
+1. Opening hook — what kind of lot this is (rookies, vintage, mixed sport, specific player, etc.), total card count
+2. "📦 What's Included" section — list the cards the seller provided. Format as a clean bullet list. Include card count.
+3. "✨ Why This Lot" section — collector appeal. Specific players/sets that stand out, era significance, what makes this a good pickup
+4. "💎 Condition Notes" section — condition info if provided; otherwise say "See photos for condition details"
+5. "🔥 Great For" section — 3-4 bullets matching buyer types (PC builders, set builders, flippers, dealers)
+6. Closing line: "Ships fast and secure in a bubble mailer with cards in penny sleeves and top loaders or team bags for protection."
+
+RULES:
+- Use the cards the seller listed — do not invent or substitute cards
+- If a player or card is mentioned by the seller, you may briefly note their significance, but stick to facts
+- Total length ~300-500 words
+- Always include the total card count
+- Always end with the shipping line
+
+OUTPUT — return ONLY this JSON, nothing else:
+{"description":"string — full emoji-rich lot description with section headers and bullet points"}`;
+
 // Legacy full system prompt kept for backward compatibility
 const LISTING_SYSTEM = QUICK_SYSTEM;
 
@@ -162,9 +189,14 @@ export async function POST(req: NextRequest) {
       : null,
   ].filter(Boolean).join("\n");
 
+  const isLotListing = !!card.isLot && (card.cardCount ?? 0) > 0;
+  const lotSummary = isLotListing
+    ? `\n\nThis is a LOT listing of ${card.cardCount} cards. Cards included in the lot:\n${card.lotContents ?? "(seller did not list individual cards — describe based on photos and any details above)"}`
+    : "";
+
   const phaseInstruction = phase === "description"
-    ? `Write the description for this listing.\nListing title: ${body.title ?? ""}\n\nCard details:\n${cardSummary}`
-    : `Generate title and pricing for this card.\n\nCard details:\n${cardSummary}`;
+    ? `Write the description for this listing.\nListing title: ${body.title ?? ""}\n\nCard details:\n${cardSummary}${lotSummary}`
+    : `Generate title and pricing for ${isLotListing ? `this lot of ${card.cardCount} cards` : "this card"}.\n\nCard details:\n${cardSummary}${lotSummary}`;
 
   const userText = hasPhotos
     ? `${phaseInstruction}\n\nPhotos are attached above.`
@@ -185,7 +217,9 @@ export async function POST(req: NextRequest) {
 
   const { claudeMessage } = await import("@/lib/claude");
   const message = await claudeMessage({
-    system:    phase === "description" ? DESCRIPTION_SYSTEM : QUICK_SYSTEM,
+    system:    phase === "description"
+                 ? (isLotListing ? LOT_DESCRIPTION_SYSTEM : DESCRIPTION_SYSTEM)
+                 : QUICK_SYSTEM,
     userContent,
     // Quick phase: always use Haiku — tiny output, blazing fast
     // Description phase: use Sonnet when photos are present for visual detail

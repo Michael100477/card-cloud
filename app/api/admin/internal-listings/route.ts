@@ -112,8 +112,9 @@ export async function POST(req: NextRequest) {
       autographedEbay: body.autographedEbay ?? null,
       customSpecifics: body.customSpecifics ?? null,
       eventTournament: body.eventTournament ?? null,
-      isLot:     body.isLot     ?? false,
-      cardCount: body.cardCount ?? null,
+      isLot:       body.isLot     ?? false,
+      cardCount:   body.cardCount ?? null,
+      lotContents: body.lotContents ?? null,
     },
   });
   return NextResponse.json({ id: listing.id });

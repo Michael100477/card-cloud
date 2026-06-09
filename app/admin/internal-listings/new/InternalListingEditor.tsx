@@ -222,6 +222,7 @@ export function InternalListingEditor({
   // Card Lots (183444) and exposes a Number of Cards input.
   const [isLot, _setIsLot]       = useState<boolean>(e?.isLot ?? false);
   const [cardCount, setCardCount] = useState<string>(e?.cardCount ? String(e.cardCount) : "");
+  const [lotContents, setLotContents] = useState<string>(e?.lotContents ?? "");
   function setIsLot(next: boolean) {
     _setIsLot(next);
     patchDraft({ categoryId: next ? "183444" : "261328" });
@@ -423,6 +424,9 @@ export function InternalListingEditor({
       minimumOffer: draft.minimumOffer ? parseFloat(draft.minimumOffer) : null,
       askingPrice: null,
       photos,
+      isLot,
+      cardCount: isLot && cardCount ? parseInt(cardCount, 10) : null,
+      lotContents: isLot ? lotContents : null,
     };
   }
 
@@ -617,6 +621,7 @@ export function InternalListingEditor({
         upc: draft.upc || null,
         isLot,
         cardCount: isLot && cardCount ? parseInt(cardCount, 10) : null,
+        lotContents: isLot ? (lotContents || null) : null,
       };
 
       let id = savedId;
@@ -829,17 +834,30 @@ export function InternalListingEditor({
         </div>
 
         {isLot && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-slate-400 text-xs mb-1 block">Number of Cards *</label>
+                <input
+                  value={cardCount}
+                  onChange={(e) => setCardCount(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="e.g. 50"
+                  inputMode="numeric"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30"
+                />
+                <p className="text-slate-400 text-xs mt-1">Required by eBay for the Trading Card Lots category</p>
+              </div>
+            </div>
             <div>
-              <label className="text-slate-400 text-xs mb-1 block">Number of Cards *</label>
-              <input
-                value={cardCount}
-                onChange={(e) => setCardCount(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="e.g. 50"
-                inputMode="numeric"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30"
+              <label className="text-slate-400 text-xs mb-1 block">Cards included in the lot *</label>
+              <textarea
+                value={lotContents}
+                onChange={(e) => setLotContents(e.target.value)}
+                placeholder={`List the cards in this lot. One per line works well, e.g.\n1989 Topps Ken Griffey Jr. #41\n1989 Upper Deck Ken Griffey Jr. #1\n1990 Topps Frank Thomas #414`}
+                rows={6}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 font-mono"
               />
-              <p className="text-slate-400 text-xs mt-1">Required by eBay for the Trading Card Lots category</p>
+              <p className="text-slate-400 text-xs mt-1">The description generator uses this list to produce a lot-style description instead of a single-card one.</p>
             </div>
           </div>
         )}

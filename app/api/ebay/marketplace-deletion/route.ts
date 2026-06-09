@@ -56,7 +56,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("[ebay-deletion] Received notification:", JSON.stringify(body).slice(0, 200));
+    // Verbose payload logging is off by default — eBay broadcasts these
+    // notifications dozens of times an hour and they were drowning out
+    // real app logs. Set EBAY_DELETION_VERBOSE=1 to re-enable for debugging.
+    if (process.env.EBAY_DELETION_VERBOSE === "1") {
+      console.log("[ebay-deletion] Received notification:", JSON.stringify(body).slice(0, 200));
+    }
 
     // eBay notification payload shape:
     // { metadata: { topic, schemaVersion, deprecated },
@@ -93,8 +98,12 @@ export async function POST(req: NextRequest) {
       }
 
       if (accountsToDelete.length > 0) {
+        // Always log actual deletions — they're rare and important
         console.log(`[ebay-deletion] Deleted ${accountsToDelete.length} user(s) linked to eBay account ${userId ?? username}`);
-      } else {
+      } else if (process.env.EBAY_DELETION_VERBOSE === "1") {
+        // No-op notifications happen constantly (eBay broadcasts deletions
+        // for users that never signed in here). Only log when explicitly
+        // debugging the webhook.
         console.log(`[ebay-deletion] No matching user found for eBay account ${userId ?? username} — nothing to delete`);
       }
     }

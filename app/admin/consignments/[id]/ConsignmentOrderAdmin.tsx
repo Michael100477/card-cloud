@@ -1370,12 +1370,12 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
             <select value={draft.categoryId} onChange={e => onPatch({ categoryId: e.target.value })} className={si + " bg-white"}>
               <option value=""></option>
               {/* If the current categoryId isn't in the loaded categories list
-                  (e.g. set via the lot toggle to 183444 before eBay's API
+                  (e.g. set via the lot toggle to 261329 before eBay's API
                   responds, or set to a leaf the API doesn't surface), show a
                   synthetic option so the select still displays it. */}
               {draft.categoryId && !categories.some(c => c.id === draft.categoryId) && (
                 <option value={draft.categoryId}>
-                  {draft.categoryId === "183444" ? "Trading Card Lots" : `Category #${draft.categoryId}`} ({draft.categoryId})
+                  {draft.categoryId === "261329" ? "Trading Card Lots" : `Category #${draft.categoryId}`} ({draft.categoryId})
                 </option>
               )}
               {categories.map(c => <option key={c.id} value={c.id}>{c.label} ({c.id})</option>)}
@@ -1609,7 +1609,7 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
             {/* Lot listings use a simple New/Used condition (eBay's Trading
                 Card Lots category accepts these two values). Singles use the
                 graded/ungraded distinction. */}
-            {draft.categoryId !== "183444" && (
+            {draft.categoryId !== "261329" && (
               <div>
                 {L("Condition type")}
                 <select
@@ -1627,7 +1627,7 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
             {/* Item condition dropdown — only for Trading Card Lots category.
                 eBay's listing UI calls this "Item condition" (not Card or Lot
                 Condition) so we match that label. */}
-            {draft.categoryId === "183444" && (
+            {draft.categoryId === "261329" && (
               <div>
                 {L("Item condition")}
                 <select

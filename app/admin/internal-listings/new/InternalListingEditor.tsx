@@ -16,7 +16,7 @@ import { canonicalizeLeague, canonicalizeSport } from "@/lib/sports-data";
 const FALLBACK_CATEGORIES: { label: string; id: string }[] = [
   { label: "Sports Trading Cards > Trading Card Singles",                                id: "261328" },
   { label: "Sports Trading Cards > Trading Card Sets",                                   id: "183436" },
-  { label: "Sports Trading Cards > Trading Card Lots",                                   id: "183444" },
+  { label: "Sports Trading Cards > Trading Card Lots",                                   id: "261329" },
   { label: "Sports Trading Cards > Sealed Trading Card Boxes",                           id: "222" },
   { label: "Sports Trading Cards > Sealed Trading Card Packs",                           id: "183454" },
   { label: "Autographs-Original > Baseball-MLB > Balls",                                 id: "1188" },
@@ -225,7 +225,7 @@ export function InternalListingEditor({
   const [lotContents, setLotContents] = useState<string>(e?.lotContents ?? "");
   function setIsLot(next: boolean) {
     _setIsLot(next);
-    patchDraft({ categoryId: next ? "183444" : "261328" });
+    patchDraft({ categoryId: next ? "261329" : "261328" });
   }
 
   // Listing form state — pre-populated from existing listing if editing
@@ -362,7 +362,7 @@ export function InternalListingEditor({
       // single-card identification (player/year/etc. will be empty so the user
       // can describe the lot as a whole).
       if (c.isLot || (typeof c.cardCount === "number" && c.cardCount >= 2)) {
-        patchDraft({ categoryId: "183444" });   // Sports Trading Cards > Trading Card Lots
+        patchDraft({ categoryId: "261329" });   // Sports Trading Cards > Trading Card Lots
         if (c.sport) setSport(c.sport);
         if (c.set)   setSet(c.set);             // optional: useful if all cards are same set
         setScanMsg(`✓ Detected a lot of ${c.cardCount ?? "multiple"} cards — category set to Trading Card Lots. Fill in the rest manually.`);

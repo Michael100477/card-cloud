@@ -598,6 +598,9 @@ function buildAspects(input: EbayListingInput): Record<string, string[]> {
       "excellent":           "Excellent",
       "very good":           "Very Good",
       "poor":                "Poor",
+      // Lot listings (Trading Card Lots category) use simpler values:
+      "new":                 "New",
+      "used":                "Used",
     };
     return map[raw.trim().toLowerCase()] ?? raw;
   };

@@ -1199,6 +1199,14 @@ const UNGRADED_CONDITIONS = [
   { label: "Poor",                 description: "Is extremely worn and displays flaws all over",   value: "Poor"                 },
 ];
 
+// For lot listings (eBay category 183444), Card Condition has different
+// accepted values than for singles — eBay simplifies to New / Used because
+// individual card grades don't apply to a bundle.
+const LOT_CONDITIONS = [
+  { label: "New",   description: "Cards are unopened / pulled fresh from a sealed pack",   value: "New"  },
+  { label: "Used",  description: "Cards have been handled, sleeved, or pulled from packs", value: "Used" },
+];
+
 export function ListingForm({ item, draft, inp, sectionOrder, categories, catStatus, shippingRules, shippingRulesSrc, onPatch, onSave, onRedo, onListOnEbay, onReviseOnEbay, onClose, defaultScheduledTime }: {
   item: Item;
   draft: ListingDraft;
@@ -1597,19 +1605,42 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
       case "ebay_condition":
         return wrap(key, "Condition", (
           <div className="flex flex-col gap-3">
-            {/* Main condition type selector */}
-            <div>
-              {L("Condition type")}
-              <select
-                value={draft.conditionType}
-                onChange={e => onPatch({ conditionType: e.target.value })}
-                className={si + " bg-white" + (!draft.conditionType ? " border-amber-300" : "")}
-              >
-                <option value="">Select condition type…</option>
-                <option value="graded">Graded — Professionally graded</option>
-                <option value="ungraded">Ungraded — Not in original package or professionally graded</option>
-              </select>
-            </div>
+            {/* Lot listings use a simple New/Used condition (eBay's Trading
+                Card Lots category accepts these two values). Singles use the
+                graded/ungraded distinction. */}
+            {draft.categoryId !== "183444" && (
+              <div>
+                {L("Condition type")}
+                <select
+                  value={draft.conditionType}
+                  onChange={e => onPatch({ conditionType: e.target.value })}
+                  className={si + " bg-white" + (!draft.conditionType ? " border-amber-300" : "")}
+                >
+                  <option value="">Select condition type…</option>
+                  <option value="graded">Graded — Professionally graded</option>
+                  <option value="ungraded">Ungraded — Not in original package or professionally graded</option>
+                </select>
+              </div>
+            )}
+
+            {/* Lot condition dropdown — only for Trading Card Lots category */}
+            {draft.categoryId === "183444" && (
+              <div>
+                {L("Lot condition")}
+                <select
+                  value={draft.cardCondition}
+                  onChange={e => onPatch({ cardCondition: e.target.value })}
+                  className={si + " bg-white" + (!draft.cardCondition ? " border-amber-300" : "")}
+                >
+                  <option value="" disabled>Select condition…</option>
+                  {LOT_CONDITIONS.map(c => (
+                    <option key={c.value} value={c.value}>
+                      {c.label} — {c.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Graded sub-fields */}
             {draft.conditionType === "graded" && (

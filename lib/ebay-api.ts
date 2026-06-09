@@ -416,6 +416,64 @@ function ebayCondition(
   return "USED_VERY_GOOD";
 }
 
+// Map between eBay's conditionId numbers and the enum strings the inventory
+// item API accepts. Used for dynamic condition lookup on lot categories
+// whose accepted conditionIds vary.
+const CONDITION_ID_TO_ENUM: Record<string, string> = {
+  "1000": "NEW",
+  "1500": "NEW_OTHER",
+  "1750": "NEW_WITH_DEFECTS",
+  "2000": "MANUFACTURER_REFURBISHED",
+  "2500": "SELLER_REFURBISHED",
+  "2750": "LIKE_NEW",
+  "3000": "USED_EXCELLENT",
+  "4000": "USED_VERY_GOOD",
+  "5000": "USED_GOOD",
+  "6000": "USED_ACCEPTABLE",
+  "7000": "FOR_PARTS_OR_NOT_WORKING",
+};
+
+/** Fetch the allowed conditionIds for a category and return the eBay
+ *  inventory-API enum string that best matches the seller's intent.
+ *  Used for lot categories whose accepted conditionIds differ from
+ *  Trading Card Singles. Falls back to USED_EXCELLENT / NEW if the
+ *  metadata fetch fails. */
+async function resolveLotConditionEnum(
+  categoryId: string,
+  cardCondition: string,
+  token: string,
+  sandbox: boolean,
+): Promise<string> {
+  const wantNew = cardCondition.trim().toLowerCase() === "new";
+  try {
+    const policyR = await ebayFetch(
+      `/sell/metadata/v1/marketplace/EBAY_US/get_item_condition_policies?filter=categoryIds:%7B${categoryId}%7D`,
+      { method: "GET" }, token, sandbox,
+    );
+    const policyData = await policyR.json().catch(() => ({}));
+    type ItemCondition = { conditionId?: string };
+    const allConditions: ItemCondition[] = policyData?.itemConditionPolicies?.[0]?.itemConditions ?? [];
+    const availableIds = allConditions.map(c => c.conditionId).filter((x): x is string => !!x);
+    console.log(`[ebay] resolveLotConditionEnum: category=${categoryId} availableIds=${JSON.stringify(availableIds)} wantNew=${wantNew}`);
+    if (wantNew) {
+      for (const id of ["1000", "1500", "1750"]) {
+        if (availableIds.includes(id)) return CONDITION_ID_TO_ENUM[id];
+      }
+    } else {
+      for (const id of ["3000", "4000", "5000", "6000"]) {
+        if (availableIds.includes(id)) return CONDITION_ID_TO_ENUM[id];
+      }
+    }
+    // Last resort: return whatever's first in the list
+    if (availableIds[0] && CONDITION_ID_TO_ENUM[availableIds[0]]) {
+      return CONDITION_ID_TO_ENUM[availableIds[0]];
+    }
+  } catch (e) {
+    console.warn(`[ebay] resolveLotConditionEnum failed:`, e);
+  }
+  return wantNew ? "NEW" : "USED_EXCELLENT";
+}
+
 // Look up eBay's required conditionDescriptors for the given category + condition.
 // Required by category 261328 (Trading Card Singles). Returns [] if the category
 // doesn't require descriptors (eBay tolerates missing field then).
@@ -807,7 +865,14 @@ export async function createEbayListing(input: EbayListingInput): Promise<{
     const aspects = buildAspects(input);
 
     // 4. Create inventory item — always delete first to clear any stale eBay associations
-    const condition = ebayCondition(input.condition, input.graded, input.conditionType, input.cardCondition, input.isLot);
+    let condition = ebayCondition(input.condition, input.graded, input.conditionType, input.cardCondition, input.isLot);
+    if (input.isLot && input.categoryId) {
+      // For lots, hard-coding USED_GOOD doesn't work — Trading Card Lots
+      // categories accept different conditionIds. Query the category's
+      // metadata to pick a valid one.
+      condition = await resolveLotConditionEnum(input.categoryId, input.cardCondition ?? "", token, sandbox);
+      console.log(`[ebay] lot condition override → ${condition}`);
+    }
 
     const conditionDescriptors = await resolveConditionDescriptors(input, token, sandbox);
     const inventoryPayload = {
@@ -954,7 +1019,14 @@ export async function reviseEbayListing(input: EbayListingInput): Promise<{ ok: 
     console.log(`[ebay] revise photos: ${uploadedPhotos.length}/${input.photos.length} uploaded`);
 
     // 2. Update inventory item (no delete — listing is live)
-    const condition = ebayCondition(input.condition, input.graded, input.conditionType, input.cardCondition, input.isLot);
+    let condition = ebayCondition(input.condition, input.graded, input.conditionType, input.cardCondition, input.isLot);
+    if (input.isLot && input.categoryId) {
+      // For lots, hard-coding USED_GOOD doesn't work — Trading Card Lots
+      // categories accept different conditionIds. Query the category's
+      // metadata to pick a valid one.
+      condition = await resolveLotConditionEnum(input.categoryId, input.cardCondition ?? "", token, sandbox);
+      console.log(`[ebay] lot condition override → ${condition}`);
+    }
     const aspects   = buildAspects(input);
     const conditionDescriptors = await resolveConditionDescriptors(input, token, sandbox);
     console.log(`[ebay] revise: updating inventory item sku=${input.sku}`);

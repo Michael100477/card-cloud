@@ -217,7 +217,21 @@ export function InternalListingEditor({
   const [grade, setGrade] = useState(e?.grade ?? "");
   const [gradeCompany, setGradeCompany] = useState(e?.gradeCompany ?? "");
   const [certNumber, setCertNumber] = useState(e?.certNumber ?? "");
-  const [autographed, setAutographed] = useState(e?.autographed ?? false);
+  const [autographed, _setAutographed] = useState(e?.autographed ?? false);
+  // Wrap setAutographed so that flipping the autograph toggle ON also bumps
+  // package dimensions to 11x6x1 — autographed cards almost always ship in
+  // the larger graded-style bubble mailer to protect the signature. Like
+  // setGraded, only applies for new listings (not when editing) and is a
+  // no-op when isLot is on (lots already use 11x6x1).
+  function setAutographed(next: boolean | ((a: boolean) => boolean)) {
+    _setAutographed((prev: boolean) => {
+      const newAutographed = typeof next === "function" ? next(prev) : next;
+      if (!e && !isLot && newAutographed) {
+        patchDraft({ dimLength: "11.0", dimWidth: "6.0", dimHeight: "1.0" });
+      }
+      return newAutographed;
+    });
+  }
   const [signedBy, setSignedBy] = useState(e?.signedBy ?? "");
   const [condition, setCondition] = useState(e?.condition ?? "");
   const [photos, setPhotos] = useState<string[]>(e?.photos ?? []);

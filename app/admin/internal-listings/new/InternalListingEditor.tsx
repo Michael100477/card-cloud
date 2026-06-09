@@ -134,7 +134,11 @@ function makeEmptyDraft(ld: EbayListingDefaults): ListingDraft {
     gradeCompanyEbay: "",
     gradeEbay: "",
     certNumberEbay: "",
-    cardCondition: "",
+    // Default raw/ungraded singles to "Excellent" — Mike's most-common
+    // condition for the cards he sells. Lot listings override this to "Used"
+    // via setIsLot; graded listings ignore cardCondition entirely (eBay
+    // identifies them via Professional Grader instead).
+    cardCondition: "Excellent",
     categoryId: String(ld.categoryId ?? "261328"),
     sport: "",
     autographAuthNumber: "",

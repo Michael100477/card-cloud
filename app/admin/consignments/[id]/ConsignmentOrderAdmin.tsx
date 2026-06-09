@@ -2247,7 +2247,18 @@ function ScheduleWidget({ enabled, scheduledTime, defaultTime, onPatch }: {
           </p>
         </div>
         <div
-          onClick={() => onPatch({ schedulingEnabled: !enabled })}
+          onClick={() => {
+            const next = !enabled;
+            onPatch({ schedulingEnabled: next });
+            // When enabling scheduling, commit the displayed default
+            // date/time immediately. Without this, draft.scheduledTime
+            // stays empty unless the user touches a picker, and the
+            // save logic (schedulingEnabled && scheduledTime) silently
+            // resolves to null — eBay would then publish immediately.
+            if (next && !scheduledTime) {
+              commit(date, hour, min, ampm);
+            }
+          }}
           className={`w-10 h-6 rounded-full relative transition-colors shrink-0 cursor-pointer ml-4 mt-0.5 ${enabled ? "bg-brand" : "bg-slate-200"}`}
         >
           <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${enabled ? "translate-x-4" : "translate-x-0.5"}`} />

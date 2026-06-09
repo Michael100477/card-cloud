@@ -681,6 +681,13 @@ export function InternalListingEditor({
     patchDraft({ listing: true, listingError: "" });
     setListError("");
     try {
+      // Persist any in-memory edits (scheduling toggle, condition change,
+      // etc.) before listing — the list-internal route reads from the DB,
+      // so anything left in React state would be silently ignored.
+      // Without this, toggling 'Schedule listing' after the last Save and
+      // then clicking List on eBay caused the listing to publish
+      // immediately because the DB still had scheduledTime=null.
+      await saveDraft();
       const r = await fetch("/api/admin/ebay/list-internal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

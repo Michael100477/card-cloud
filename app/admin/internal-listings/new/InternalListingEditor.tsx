@@ -494,15 +494,12 @@ export function InternalListingEditor({
 
   // ── generateListing ────────────────────────────────────────────────────────
   async function generateListing() {
-    // Client-side validation for lot listings — the AI prompt depends on the
-    // seller's card list, and an empty list produces unparseable output.
+    // Client-side validation for lot listings — only Number of Cards is
+    // truly required (eBay's category demands it). Lot contents is optional;
+    // when empty, the server falls back to a generic lot description.
     if (isLot) {
       if (!cardCount || parseInt(cardCount, 10) < 2) {
         patchDraft({ error: "Lot listings need a Number of Cards (≥ 2)." });
-        return;
-      }
-      if (!lotContents.trim()) {
-        patchDraft({ error: "Please list the cards included in the lot before generating." });
         return;
       }
     }
@@ -885,15 +882,15 @@ export function InternalListingEditor({
               </div>
             </div>
             <div>
-              <label className="text-slate-400 text-xs mb-1 block">Cards included in the lot *</label>
+              <label className="text-slate-400 text-xs mb-1 block">Cards included in the lot (optional)</label>
               <textarea
                 value={lotContents}
                 onChange={(e) => setLotContents(e.target.value)}
-                placeholder={`List the cards in this lot. One per line works well, e.g.\n1989 Topps Ken Griffey Jr. #41\n1989 Upper Deck Ken Griffey Jr. #1\n1990 Topps Frank Thomas #414`}
+                placeholder={`Optional — list the cards in this lot, one per line, e.g.\n1989 Topps Ken Griffey Jr. #41\n1989 Upper Deck Ken Griffey Jr. #1\n1990 Topps Frank Thomas #414`}
                 rows={6}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 font-mono"
               />
-              <p className="text-slate-400 text-xs mt-1">The description generator uses this list to produce a lot-style description instead of a single-card one.</p>
+              <p className="text-slate-400 text-xs mt-1">If listed, the description generator bullets each card. If left blank, it describes the lot in general terms from the photos and other details.</p>
             </div>
           </div>
         )}

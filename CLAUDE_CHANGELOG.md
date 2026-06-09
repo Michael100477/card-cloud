@@ -52,6 +52,8 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 **Mike's verification:** standalone label flow worked end-to-end — test label printed correctly on the bottom-half sticky portion of his label paper after 4 rounds of CSS tuning (vertical/landscape rotation, top-vs-bottom page positioning for his printer's paper-feed direction, and final margin set to 0.75").
 
+**Production verified:** after the `9913cad` push, Mike ran the full label flow on `thecardcloud.com` (Railway) and confirmed it works identically to local. Feature is live and Mike can buy real labels via Card Cloud whenever he flips the EasyPost environment slider to production.
+
 ---
 
 ## 2026-06-08 12:55 — Mirror-eBay fix: auto-import unmatched orders + repair gates and filters

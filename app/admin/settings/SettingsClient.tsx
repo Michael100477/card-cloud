@@ -30,6 +30,7 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
   ebayDefaultListingType, ebayDefaultAuctionDuration, ebayDefaultStartPrice, ebayDefaultScheduledTime,
   tradeShipName, tradeShipStreet1, tradeShipStreet2, tradeShipCity, tradeShipState, tradeShipPostalCode,
   supplyCostEnvelope, supplyCostLabel, supplyCostPackingSlip, supplyCostTapePerInch, supplyTapeInchesPerOrder,
+  defaultShippingType,
 }: {
   withPhotos: string; withoutPhotos: string;
   exchangeStandard: string; exchangePremier: string; exchangePremierThreshold: string;
@@ -43,6 +44,7 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
   tradeShipCity: string; tradeShipState: string; tradeShipPostalCode: string;
   supplyCostEnvelope: string; supplyCostLabel: string; supplyCostPackingSlip: string;
   supplyCostTapePerInch: string; supplyTapeInchesPerOrder: string;
+  defaultShippingType: string;
 }) {
   const params     = useSearchParams();
   const [wp,   setWp]   = useState(withPhotos);
@@ -100,6 +102,7 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
   const [envMax,      setEnvMax]      = useState(String(shipping.envelopeMaxValue));
   const [bubbleMin,   setBubbleMin]   = useState(String(shipping.bubbleMailerMin));
   const [bubbleMax,   setBubbleMax]   = useState(String(shipping.bubbleMailerMax));
+  const [defShipType, setDefShipType] = useState(defaultShippingType ?? "flat");
   const [shipSaved,   setShipSaved]   = useState(false);
   const [shipSaving,  setShipSaving]  = useState(false);
 
@@ -202,6 +205,7 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
       saveSetting("shipping_envelope_max_value",  envMax),
       saveSetting("shipping_bubble_mailer_min",   bubbleMin),
       saveSetting("shipping_bubble_mailer_max",   bubbleMax),
+      saveSetting("default_shipping_type",        defShipType),
     ]);
     setShipSaving(false); setShipSaved(true); setTimeout(() => setShipSaved(false), 2500);
   }
@@ -441,13 +445,31 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
         </div>
       </div>
 
-      {/* ── Shipping costs ── */}
+      {/* ── Shipping ── */}
       <div className="bg-white rounded-2xl border border-slate-100 p-6">
-        <h2 className="text-navy font-semibold mb-1">Shipping costs</h2>
+        <h2 className="text-navy font-semibold mb-1">Shipping</h2>
         <p className="text-slate-400 text-sm mb-5">
-          Shown on the consignment form so sellers know how much to build into their price.
-          Updating here instantly updates all mentions site-wide.
+          Shipping cost rules for the consignment form (envelope + bubble
+          mailer ranges) plus the default cost type that pre-fills on every
+          new eBay listing. Updating here instantly updates all mentions
+          site-wide.
         </p>
+
+        <div className="bg-slate-50 rounded-xl p-4 mb-5">
+          <p className="text-navy font-semibold text-sm mb-1">Default shipping type for new listings</p>
+          <p className="text-slate-400 text-xs mb-3">
+            Pre-selected when you create a new eBay listing. Per-listing override is always available.
+          </p>
+          <select
+            value={defShipType}
+            onChange={e => setDefShipType(e.target.value)}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-navy bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+          >
+            <option value="flat">Flat rate — same cost for all buyers (auto-fills with Bubble mailer Min cost below)</option>
+            <option value="calculated">Calculated — eBay quotes based on buyer&apos;s ZIP and package size</option>
+            <option value="free">Free shipping — seller absorbs the postage</option>
+          </select>
+        </div>
         <div className="flex flex-col gap-5 mb-5">
           <div className="bg-slate-50 rounded-xl p-4">
             <p className="text-navy font-semibold text-sm mb-1">eBay Standard Envelope</p>

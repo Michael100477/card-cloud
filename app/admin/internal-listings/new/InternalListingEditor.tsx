@@ -77,9 +77,14 @@ function makeEmptyDraft(ld: EbayListingDefaults): ListingDraft {
     setOverride: "",
     cardNumberOverride: "",
     shippingCostType: String(
-      ld.shippingCostType ?? "Calculated: Cost varies based on buyer location"
+      ld.shippingCostType ?? "Flat rate: Same cost regardless of buyer location"
     ),
-    flatRateShipping: "",
+    // Auto-fill the flat rate amount from Settings → Rates → Shipping →
+    // Bubble mailer min cost when the default type is flat. Seller can
+    // override per-listing.
+    flatRateShipping: ld.defaultShippingType === "flat" && ld.bubbleMailerMin
+      ? String(ld.bubbleMailerMin)
+      : "",
     excludedLocations: ["Alaska/Hawaii", "US Territories and Protectorates"],
     combinedShippingRule: "",
     // Default to UNGRADED package dimensions/weight since new listings start with graded=false.

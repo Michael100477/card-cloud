@@ -66,6 +66,7 @@ export default async function AdminSettingsPage() {
         supplyCostPackingSlip={map.get("supply_cost_packing_slip")        ?? "0.02"}
         supplyCostTapePerInch={map.get("supply_cost_tape_per_inch")       ?? "0"}
         supplyTapeInchesPerOrder={map.get("supply_tape_inches_per_order") ?? "0"}
+        defaultShippingType={map.get("default_shipping_type") ?? "flat"}
         links={links}
         sitePages={sitePages.map(p => ({ id: p.id, path: p.path, label: p.label }))}
         sectionOrder={SECTION_ORDER}

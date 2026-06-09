@@ -1199,12 +1199,13 @@ const UNGRADED_CONDITIONS = [
   { label: "Poor",                 description: "Is extremely worn and displays flaws all over",   value: "Poor"                 },
 ];
 
-// For lot listings (eBay category 183444), Card Condition has different
-// accepted values than for singles — eBay simplifies to New / Used because
-// individual card grades don't apply to a bundle.
+// For lot listings (eBay category 183444), Card Condition uses eBay's
+// standard New / Used inventory conditions. Labels and descriptions match
+// what eBay displays in its own listing flow so the seller sees the same
+// language on both sides.
 const LOT_CONDITIONS = [
-  { label: "New",   description: "Cards are unopened / pulled fresh from a sealed pack",   value: "New"  },
-  { label: "Used",  description: "Cards have been handled, sleeved, or pulled from packs", value: "Used" },
+  { label: "New",  description: "A brand-new, unused, unopened, undamaged item (including handmade items). See the seller's listing for full details.", value: "New"  },
+  { label: "Used", description: "An item that has been used previously. See the seller's listing for full details and description of any imperfections.", value: "Used" },
 ];
 
 export function ListingForm({ item, draft, inp, sectionOrder, categories, catStatus, shippingRules, shippingRulesSrc, onPatch, onSave, onRedo, onListOnEbay, onReviseOnEbay, onClose, defaultScheduledTime }: {
@@ -1623,10 +1624,12 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
               </div>
             )}
 
-            {/* Lot condition dropdown — only for Trading Card Lots category */}
+            {/* Item condition dropdown — only for Trading Card Lots category.
+                eBay's listing UI calls this "Item condition" (not Card or Lot
+                Condition) so we match that label. */}
             {draft.categoryId === "183444" && (
               <div>
-                {L("Lot condition")}
+                {L("Item condition")}
                 <select
                   value={draft.cardCondition}
                   onChange={e => onPatch({ cardCondition: e.target.value })}

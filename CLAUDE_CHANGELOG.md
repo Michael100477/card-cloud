@@ -5,6 +5,32 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-06-09 — Cost tracking + Payout tab (per-item net-profit reporting)
+
+**Why:** Mike wants to see the actual margin on every shipment — sale price minus eBay fees minus shipping postage minus packing supplies, broken out per item, with consignment commission applied for consignment sales.
+
+**What landed:**
+
+1. **Schema migration `20260609180000_shipping_payout_costs`** — added 4 nullable Decimal(10,2) columns to both `internal_listings` and `ebay_listings`:
+   - `shippingPostageCost` — what EasyPost charged for the label
+   - `shippingSupplyCost` — frozen snapshot at ship time
+   - `ebayPayoutAmount` — what eBay actually paid us (from Finances API)
+   - `ebayFeeAmount` — total fees deducted
+   Migration applied to Railway DB directly (Postgres 18 server, used a `docker run postgres:18` for the version-matched pg_dump backup → `db-backups/railway-pre-shipping-payout-cols-2026-06-09T0844.sql`). Recorded in `_prisma_migrations` so the Railway deploy doesn't re-run it.
+2. **Settings → "Shipping supply costs"** — new section with 5 fields (envelope, label paper, packing slip, tape per inch, tape inches per order) + a live per-shipment preview. Stored as `siteSetting` rows.
+3. **`computeSupplyCost()`** in `lib/easypost.ts` reads the settings and returns the per-shipment total. Cost capture wired into `app/api/admin/shipping/[kind]/[id]/create-label/route.ts` — `shippingPostageCost` set from EasyPost's `cost` and `shippingSupplyCost` snapshotted from current settings when the row flips to shipped.
+4. **`sell.finances` scope** added to the eBay OAuth SCOPES list. Mike will need to reconnect his eBay account once on Railway to get tokens with the new grant.
+5. **`lib/ebay-finances.ts`** — client for eBay's Finances API. `getPayoutsForRecentOrders(days=60)` pages through `/sell/finances/v1/transaction`, groups by `ORDER_ID` reference, sums SALE credits minus REFUND/fee debits → returns `Map<orderId, {payoutAmount, feeAmount, refundAmount}>`. `syncPayouts()` patches the values onto matching `internal_listing` / `ebay_listing` rows (idempotent — skips unchanged).
+6. **`syncOrdersThrottled` extended** in `lib/ebay-sync-cache.ts` to call `syncPayouts()` alongside the existing order + SoldList syncs.
+7. **Payout tab on `/admin/listings`** — new tab listing every shipped item with: Card title, Sale, eBay payout, Postage, Supplies, Commission (consignment only, computed from `commission_with_photos` / `commission_without_photos` settings based on `graded` flag), **Net to Mike**, Consignor payout (consignment only). Totals strip across the top sums each column for the period. Internal vs Consignment distinguished by a label under the title. Rows without payout data yet show "syncing…" placeholders.
+
+**Files added:** `lib/ebay-finances.ts`, `prisma/migrations/20260609180000_shipping_payout_costs/migration.sql`.
+**Files modified:** `prisma/schema.prisma`, `lib/easypost.ts`, `lib/ebay-sync-cache.ts`, `lib/ebay-auth.ts`, `app/admin/settings/page.tsx`, `app/admin/settings/SettingsTabs.tsx`, `app/admin/settings/SettingsClient.tsx`, `app/admin/listings/page.tsx`, `app/admin/listings/ListingsClient.tsx`, `app/api/admin/shipping/[kind]/[id]/create-label/route.ts`.
+
+**Production action required:** after Railway deploys, Mike has to go to Admin → API Keys → eBay — Production → **Reconnect eBay account** so the new access token includes the `sell.finances` grant. Without that the payout sync silently returns 0 rows (it catches the error). Once reconnected, the Payout tab populates on the next page load.
+
+---
+
 ## 2026-06-09 — EasyPost shipping label integration (Card Cloud-native label buying)
 
 **Why:** eBay Sell Logistics API turned out to be a Limited Release product (Mike got `invalid_scope` even after requesting access). Picked EasyPost as the replacement — Auctane's modern REST API, same USPS Commercial Plus rates as Stamps.com, $0.01 per label, pay-as-you-go.

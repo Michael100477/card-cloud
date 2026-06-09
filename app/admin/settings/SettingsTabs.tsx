@@ -25,6 +25,8 @@ interface Props {
   ebayDefaultStartPrice: string; ebayDefaultScheduledTime: string;
   tradeShipName: string; tradeShipStreet1: string; tradeShipStreet2: string;
   tradeShipCity: string; tradeShipState: string; tradeShipPostalCode: string;
+  supplyCostEnvelope: string; supplyCostLabel: string; supplyCostPackingSlip: string;
+  supplyCostTapePerInch: string; supplyTapeInchesPerOrder: string;
   // Links props
   links: SiteLink[];
   sitePages: SitePage[];

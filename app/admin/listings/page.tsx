@@ -23,13 +23,13 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     // Pull sold/paid/shipped status from eBay's Fulfillment API (rate-limited to 1/min)
     syncOrdersThrottled(),
   ]);
-  const [listings, internalListings, livePrices, questionCounts] = await Promise.all([
+  const [listings, internalListings, livePrices, questionCounts, settingsRows] = await Promise.all([
     db.ebayListing.findMany({
       orderBy: { createdAt: "desc" },
       include: {
         item: {
           select: {
-            id: true, player: true, year: true, set: true, grade: true, gradeCompany: true,
+            id: true, player: true, year: true, set: true, grade: true, gradeCompany: true, graded: true,
             order: { select: { id: true, user: { select: { displayName: true, username: true, email: true } } } },
           },
         },
@@ -38,7 +38,11 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     db.internalListing.findMany({ orderBy: { createdAt: "desc" } }),
     getLivePrices(),
     getQuestionCounts(),
+    db.siteSetting.findMany({ where: { key: { in: ["commission_with_photos", "commission_without_photos"] } } }),
   ]);
+  const settingsMap = new Map(settingsRows.map(s => [s.key, s.value]));
+  const commissionRaw    = parseFloat(settingsMap.get("commission_with_photos")    ?? "15");
+  const commissionGraded = parseFloat(settingsMap.get("commission_without_photos") ?? "20");
 
   // Reconcile active listings against eBay's live state on every page load.
   // eBay returns three buckets for each listing: ActiveList (still live),
@@ -123,6 +127,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     set:          l.item.set,
     grade:        l.item.grade,
     gradeCompany: l.item.gradeCompany,
+    graded:       l.item.graded,
     ownerName:    l.item.order.user.displayName ?? l.item.order.user.username ?? l.item.order.user.email,
     currentBid:    l.ebayListingId ? (livePrices.get(l.ebayListingId)?.currentPrice ?? null) : null,
     bidCount:      l.ebayListingId ? (livePrices.get(l.ebayListingId)?.bidCount     ?? null) : null,
@@ -137,6 +142,10 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     paidAt:           l.paidAt?.toISOString() ?? null,
     soldAt:           l.soldAt?.toISOString() ?? null,
     shippingCarrier:  l.shippingCarrier,
+    shippingPostageCost: l.shippingPostageCost ? Number(l.shippingPostageCost) : null,
+    shippingSupplyCost:  l.shippingSupplyCost  ? Number(l.shippingSupplyCost)  : null,
+    ebayPayoutAmount:    l.ebayPayoutAmount    ? Number(l.ebayPayoutAmount)    : null,
+    ebayFeeAmount:       l.ebayFeeAmount       ? Number(l.ebayFeeAmount)       : null,
   }));
 
   const serializedInternal = savedInternalListings.map(l => ({
@@ -169,6 +178,10 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
     paidAt:           l.paidAt?.toISOString() ?? null,
     soldAt:           l.soldAt?.toISOString() ?? null,
     shippingCarrier:  l.shippingCarrier,
+    shippingPostageCost: l.shippingPostageCost ? Number(l.shippingPostageCost) : null,
+    shippingSupplyCost:  l.shippingSupplyCost  ? Number(l.shippingSupplyCost)  : null,
+    ebayPayoutAmount:    l.ebayPayoutAmount    ? Number(l.ebayPayoutAmount)    : null,
+    ebayFeeAmount:       l.ebayFeeAmount       ? Number(l.ebayFeeAmount)       : null,
   }));
 
   return (
@@ -183,7 +196,12 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
           That listing was an incomplete import. It&#39;s been removed — click <strong>Edit listing</strong> below to re-import it with all fields filled in.
         </div>
       )}
-      <ListingsClient listings={serialized} internalListings={serializedInternal} />
+      <ListingsClient
+        listings={serialized}
+        internalListings={serializedInternal}
+        commissionRaw={commissionRaw}
+        commissionGraded={commissionGraded}
+      />
     </div>
   );
 }

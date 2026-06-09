@@ -64,7 +64,7 @@ interface Listing {
   listedAt: string | null; orderId: string; itemId: string;
   ebayListingId: string | null;
   player: string; year: number | null; set: string | null;
-  grade: string | null; gradeCompany: string | null; ownerName: string;
+  grade: string | null; gradeCompany: string | null; graded: boolean; ownerName: string;
   currentBid: number | null; bidCount: number | null; watchCount: number | null;
   endTime: string | null; questionCount: number;
   trackingNumber: string | null; shippedAt: string | null;
@@ -73,6 +73,10 @@ interface Listing {
   soldAt: string | null;
   shippingCarrier: string | null;
   buyerUsername: string | null;
+  shippingPostageCost: number | null;
+  shippingSupplyCost:  number | null;
+  ebayPayoutAmount:    number | null;
+  ebayFeeAmount:       number | null;
 }
 
 interface InternalListing {
@@ -91,6 +95,10 @@ interface InternalListing {
   soldAt: string | null;
   shippingCarrier: string | null;
   buyerUsername: string | null;
+  shippingPostageCost: number | null;
+  shippingSupplyCost:  number | null;
+  ebayPayoutAmount:    number | null;
+  ebayFeeAmount:       number | null;
 }
 
 interface DirectListing {
@@ -118,20 +126,25 @@ const STATUS_STYLE: Record<string, string> = {
 export function ListingsClient({
   listings: initialListings,
   internalListings: initialInternal,
+  commissionRaw,
+  commissionGraded,
 }: {
   listings: Listing[];
   internalListings: InternalListing[];
+  commissionRaw:    number;
+  commissionGraded: number;
 }) {
   const params = useSearchParams();
   const router = useRouter();
 
-  const [tab, setTab] = useState<"consignment" | "internal" | "scheduled" | "waiting" | "paid" | "shipped" | "ended">(
+  const [tab, setTab] = useState<"consignment" | "internal" | "scheduled" | "waiting" | "paid" | "shipped" | "ended" | "payout">(
     params.get("tab") === "internal"   ? "internal"
     : params.get("tab") === "scheduled" ? "scheduled"
     : params.get("tab") === "waiting"   ? "waiting"
     : params.get("tab") === "paid"      ? "paid"
     : params.get("tab") === "shipped"   ? "shipped"
     : params.get("tab") === "ended"     ? "ended"
+    : params.get("tab") === "payout"    ? "payout"
     : "consignment"
   );
   // Global search — when non-empty, overrides the tab view and shows
@@ -330,24 +343,27 @@ export function ListingsClient({
       {/* Tabs */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
-          {(["consignment", "internal", "scheduled", "waiting", "paid", "shipped", "ended"] as const).map(t => {
+          {(["consignment", "internal", "scheduled", "waiting", "paid", "shipped", "ended", "payout"] as const).map(t => {
             const label = t === "consignment" ? "Consignment"
                         : t === "internal"    ? "Internal"
                         : t === "scheduled"   ? "Scheduled"
                         : t === "waiting"     ? "Waiting for payment"
                         : t === "paid"        ? "Waiting to be Shipped"
                         : t === "shipped"     ? "Shipped"
-                        : "Ended";
+                        : t === "ended"       ? "Ended"
+                        : "Payout";
             const scheduledCount = [...listings, ...internal].filter(l => l.status === "scheduled").length;
             const waitingCount   = [...listings, ...internal].filter(l => l.status === "sold").length;
             const paidCount      = [...listings, ...internal].filter(l => l.status === "paid").length;
             const shippedCount   = [...listings, ...internal].filter(l => l.status === "shipped").length;
             const endedCount     = [...listings, ...internal].filter(l => l.status === "ended").length;
+            const payoutCount    = [...listings, ...internal].filter(l => l.status === "shipped" && l.soldPrice != null).length;
             const count = t === "scheduled" ? scheduledCount
                         : t === "waiting"   ? waitingCount
                         : t === "paid"      ? paidCount
                         : t === "shipped"   ? shippedCount
-                        : t === "ended"     ? endedCount : 0;
+                        : t === "ended"     ? endedCount
+                        : t === "payout"    ? payoutCount : 0;
             return (
               <button key={t} onClick={() => setTab(t)}
                 className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === t ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}>
@@ -982,6 +998,113 @@ export function ListingsClient({
                   ))}
               </tbody>
             </table>
+          </div>
+        );
+      })()}
+
+      {/* Payout tab — per-item net profit for shipped sales */}
+      {!search.trim() && tab === "payout" && (() => {
+        const all = [
+          ...listings .filter(l => l.status === "shipped" && l.soldPrice != null).map(l => ({ ...l, kind: "consignment" as const })),
+          ...internal.filter(l => l.status === "shipped" && l.soldPrice != null).map(l => ({ ...l, kind: "internal"   as const })),
+        ].sort((a, b) => (b.shippedAt ?? "").localeCompare(a.shippedAt ?? ""));
+
+        // Totals across all rows
+        const totalSale     = all.reduce((s, l) => s + (l.soldPrice          ?? 0), 0);
+        const totalPayout   = all.reduce((s, l) => s + (l.ebayPayoutAmount   ?? 0), 0);
+        const totalPostage  = all.reduce((s, l) => s + (l.shippingPostageCost ?? 0), 0);
+        const totalSupplies = all.reduce((s, l) => s + (l.shippingSupplyCost  ?? 0), 0);
+        const totalCommission = all.reduce((s, l) => {
+          if (l.kind !== "consignment") return s;
+          const rate = (l as Listing).graded ? commissionGraded : commissionRaw;
+          return s + ((l.soldPrice ?? 0) * rate / 100);
+        }, 0);
+        // Net to Mike = (internal: payout - postage - supplies) + (consignment: commission)
+        const netToMike = all.reduce((s, l) => {
+          if (l.kind === "internal") {
+            return s + ((l.ebayPayoutAmount ?? 0) - (l.shippingPostageCost ?? 0) - (l.shippingSupplyCost ?? 0));
+          } else {
+            const rate = (l as Listing).graded ? commissionGraded : commissionRaw;
+            return s + ((l.soldPrice ?? 0) * rate / 100);
+          }
+        }, 0);
+
+        if (all.length === 0) {
+          return (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+              <p className="text-navy font-semibold mb-2">Nothing to payout yet</p>
+              <p className="text-slate-400 text-sm">Items appear here once they ship and eBay pays out for them.</p>
+            </div>
+          );
+        }
+        return (
+          <div className="flex flex-col gap-4">
+            {/* Totals summary */}
+            <div className="bg-white rounded-2xl border border-slate-100 p-5 grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+              <div><p className="text-slate-400 text-xs uppercase tracking-wide">Sales</p>           <p className="text-navy font-semibold mt-0.5">${usd(totalSale)}</p></div>
+              <div><p className="text-slate-400 text-xs uppercase tracking-wide">eBay payouts</p>     <p className="text-navy font-semibold mt-0.5">${usd(totalPayout)}</p></div>
+              <div><p className="text-slate-400 text-xs uppercase tracking-wide">Postage</p>          <p className="text-navy font-semibold mt-0.5">${usd(totalPostage)}</p></div>
+              <div><p className="text-slate-400 text-xs uppercase tracking-wide">Supplies</p>         <p className="text-navy font-semibold mt-0.5">${usd(totalSupplies)}</p></div>
+              <div><p className="text-slate-400 text-xs uppercase tracking-wide">Net to Mike</p>      <p className="text-green-700 font-bold text-base mt-0.5">${usd(netToMike)}</p></div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
+                  <tr>
+                    <th className="text-left px-4 py-3">Card</th>
+                    <th className="text-right px-3 py-3">Sale</th>
+                    <th className="text-right px-3 py-3">eBay payout</th>
+                    <th className="text-right px-3 py-3">Postage</th>
+                    <th className="text-right px-3 py-3">Supplies</th>
+                    <th className="text-right px-3 py-3">Commission</th>
+                    <th className="text-right px-3 py-3">Net to Mike</th>
+                    <th className="text-right px-3 py-3">Consignor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {all.map((l, i) => {
+                    const sale     = l.soldPrice          ?? 0;
+                    const payout   = l.ebayPayoutAmount   ?? null;     // null = not yet synced
+                    const postage  = l.shippingPostageCost ?? 0;
+                    const supplies = l.shippingSupplyCost  ?? 0;
+                    const isConsign = l.kind === "consignment";
+                    const rate = isConsign ? ((l as Listing).graded ? commissionGraded : commissionRaw) : 0;
+                    const commission = isConsign ? sale * rate / 100 : 0;
+                    const net = isConsign
+                      ? commission
+                      : (payout ?? 0) - postage - supplies;
+                    const consignor = isConsign && payout != null
+                      ? payout - postage - supplies - commission
+                      : null;
+                    return (
+                      <tr key={`${l.kind}-${l.id}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="px-4 py-3 align-top">
+                          <p className="text-navy font-medium break-words">{l.title}</p>
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            {isConsign ? "Consignment" : "Internal"}{isConsign && (l as Listing).graded ? " · Graded" : isConsign ? " · Raw" : ""}
+                            {l.ebayListingId ? ` · eBay #${l.ebayListingId}` : ""}
+                          </p>
+                        </td>
+                        <td className="px-3 py-3 align-top text-right text-navy">${usd(sale)}</td>
+                        <td className="px-3 py-3 align-top text-right text-navy">
+                          {payout != null ? `$${usd(payout)}` : <span className="text-slate-400 italic text-xs">syncing…</span>}
+                        </td>
+                        <td className="px-3 py-3 align-top text-right text-slate-600">${usd(postage)}</td>
+                        <td className="px-3 py-3 align-top text-right text-slate-600">${usd(supplies)}</td>
+                        <td className="px-3 py-3 align-top text-right text-slate-600">
+                          {isConsign ? `$${usd(commission)} (${rate}%)` : "—"}
+                        </td>
+                        <td className="px-3 py-3 align-top text-right text-green-700 font-semibold">${usd(net)}</td>
+                        <td className="px-3 py-3 align-top text-right text-navy">
+                          {consignor != null ? `$${usd(consignor)}` : isConsign ? <span className="text-slate-400 italic text-xs">syncing…</span> : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         );
       })()}

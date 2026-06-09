@@ -29,6 +29,7 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
   tradeCostPerSide, tradeServiceFee, tradeShippingFee,
   ebayDefaultListingType, ebayDefaultAuctionDuration, ebayDefaultStartPrice, ebayDefaultScheduledTime,
   tradeShipName, tradeShipStreet1, tradeShipStreet2, tradeShipCity, tradeShipState, tradeShipPostalCode,
+  supplyCostEnvelope, supplyCostLabel, supplyCostPackingSlip, supplyCostTapePerInch, supplyTapeInchesPerOrder,
 }: {
   withPhotos: string; withoutPhotos: string;
   exchangeStandard: string; exchangePremier: string; exchangePremierThreshold: string;
@@ -40,6 +41,8 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
   ebayDefaultStartPrice: string; ebayDefaultScheduledTime: string;
   tradeShipName: string; tradeShipStreet1: string; tradeShipStreet2: string;
   tradeShipCity: string; tradeShipState: string; tradeShipPostalCode: string;
+  supplyCostEnvelope: string; supplyCostLabel: string; supplyCostPackingSlip: string;
+  supplyCostTapePerInch: string; supplyTapeInchesPerOrder: string;
 }) {
   const params     = useSearchParams();
   const [wp,   setWp]   = useState(withPhotos);
@@ -99,6 +102,16 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
   const [bubbleMax,   setBubbleMax]   = useState(String(shipping.bubbleMailerMax));
   const [shipSaved,   setShipSaved]   = useState(false);
   const [shipSaving,  setShipSaving]  = useState(false);
+
+  // Shipping supply costs (used by the Payout tab to compute net profit
+  // per shipment). Captured on every label purchase as a frozen snapshot.
+  const [supEnv,      setSupEnv]      = useState(supplyCostEnvelope);
+  const [supLabel,    setSupLabel]    = useState(supplyCostLabel);
+  const [supPack,     setSupPack]     = useState(supplyCostPackingSlip);
+  const [supTapeIn,   setSupTapeIn]   = useState(supplyCostTapePerInch);
+  const [supTapeCnt,  setSupTapeCnt]  = useState(supplyTapeInchesPerOrder);
+  const [supSaved,    setSupSaved]    = useState(false);
+  const [supSaving,   setSupSaving]   = useState(false);
 
   useEffect(() => {
     if (params.get("ebay_connected")) setEbayMsg({ type: "success", text: "eBay account connected successfully!" });
@@ -191,6 +204,18 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
       saveSetting("shipping_bubble_mailer_max",   bubbleMax),
     ]);
     setShipSaving(false); setShipSaved(true); setTimeout(() => setShipSaved(false), 2500);
+  }
+
+  async function saveSupplyCosts() {
+    setSupSaving(true);
+    await Promise.all([
+      saveSetting("supply_cost_envelope",          supEnv),
+      saveSetting("supply_cost_label",             supLabel),
+      saveSetting("supply_cost_packing_slip",      supPack),
+      saveSetting("supply_cost_tape_per_inch",     supTapeIn),
+      saveSetting("supply_tape_inches_per_order",  supTapeCnt),
+    ]);
+    setSupSaving(false); setSupSaved(true); setTimeout(() => setSupSaved(false), 2500);
   }
 
   return (
@@ -483,6 +508,70 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
             {shipSaving ? "Saving…" : "Save shipping rates"}
           </button>
           {shipSaved && <span className="text-green-600 text-sm">✓ Saved — consignment form updated</span>}
+        </div>
+      </div>
+
+      {/* ── Shipping supply costs ── */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-6">
+        <h2 className="text-navy font-semibold mb-1">Shipping supply costs</h2>
+        <p className="text-slate-400 text-sm mb-5">
+          Per-unit costs of packing supplies used on each shipment. Captured
+          as a snapshot every time a label is bought, then used by the Payout
+          tab to compute net profit per item. Most card shipments don&apos;t
+          need tape — leave the tape fields at 0 if that applies.
+        </p>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="text-slate-500 text-xs mb-1 block">Envelope ($)</label>
+            <input type="number" min="0" step="0.01" value={supEnv} onChange={e => setSupEnv(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            <p className="text-slate-400 text-xs mt-1">Self-sealing bubble mailer or cardboard envelope</p>
+          </div>
+          <div>
+            <label className="text-slate-500 text-xs mb-1 block">Sticker label sheet ($)</label>
+            <input type="number" min="0" step="0.01" value={supLabel} onChange={e => setSupLabel(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            <p className="text-slate-400 text-xs mt-1">The peel-and-stick label paper itself (not postage)</p>
+          </div>
+          <div>
+            <label className="text-slate-500 text-xs mb-1 block">Packing slip sheet ($)</label>
+            <input type="number" min="0" step="0.01" value={supPack} onChange={e => setSupPack(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            <p className="text-slate-400 text-xs mt-1">Standard printer paper for the packing slip</p>
+          </div>
+          <div>
+            <label className="text-slate-500 text-xs mb-1 block">Tape ($ per inch)</label>
+            <input type="number" min="0" step="0.001" value={supTapeIn} onChange={e => setSupTapeIn(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            <p className="text-slate-400 text-xs mt-1">Leave at 0 if you don&apos;t use tape</p>
+          </div>
+          <div>
+            <label className="text-slate-500 text-xs mb-1 block">Tape used per order (inches)</label>
+            <input type="number" min="0" step="0.5" value={supTapeCnt} onChange={e => setSupTapeCnt(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            <p className="text-slate-400 text-xs mt-1">Default inches used on a typical order</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 rounded-xl p-4 mb-4 text-sm">
+          <p className="text-slate-500 text-xs mb-1">Per-shipment supply cost (preview):</p>
+          <p className="text-navy font-semibold">
+            ${(
+              parseFloat(supEnv || "0") +
+              parseFloat(supLabel || "0") +
+              parseFloat(supPack || "0") +
+              parseFloat(supTapeIn || "0") * parseFloat(supTapeCnt || "0")
+            ).toFixed(2)}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button onClick={saveSupplyCosts} disabled={supSaving}
+            className="bg-brand text-white font-semibold px-5 py-2 rounded-xl text-sm hover:bg-blue-600 disabled:opacity-50">
+            {supSaving ? "Saving…" : "Save supply costs"}
+          </button>
+          {supSaved && <span className="text-green-600 text-sm">✓ Saved</span>}
         </div>
       </div>
 

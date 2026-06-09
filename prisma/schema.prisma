@@ -684,6 +684,13 @@ model EbayListing {
   shippingCarrier   String?   // USPS, UPS, FedEx, DHL — used to build tracking URLs
   shippedAt         DateTime?
 
+  // Cost breakdown — populated at ship time and on payout sync. Used by the
+  // Payout tab for net-profit reporting.
+  shippingPostageCost Decimal?  @db.Decimal(10, 2)   // what EasyPost charged for the label
+  shippingSupplyCost  Decimal?  @db.Decimal(10, 2)   // computed at ship time from settings
+  ebayPayoutAmount    Decimal?  @db.Decimal(10, 2)   // pulled from eBay Finances API
+  ebayFeeAmount       Decimal?  @db.Decimal(10, 2)   // soldPrice - ebayPayoutAmount
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -848,6 +855,13 @@ model InternalListing {
   trackingNumber    String?
   shippingCarrier   String?   // USPS, UPS, FedEx, DHL — used to build tracking URLs
   shippedAt         DateTime?
+
+  // Cost breakdown — populated at ship time and on payout sync. Used by the
+  // Payout tab for net-profit reporting.
+  shippingPostageCost Decimal?  @db.Decimal(10, 2)   // what EasyPost charged for the label
+  shippingSupplyCost  Decimal?  @db.Decimal(10, 2)   // computed at ship time from settings
+  ebayPayoutAmount    Decimal?  @db.Decimal(10, 2)   // pulled from eBay Finances API
+  ebayFeeAmount       Decimal?  @db.Decimal(10, 2)   // soldPrice - ebayPayoutAmount
 
   @@map("internal_listings")
 }

@@ -61,6 +61,11 @@ export default async function AdminSettingsPage() {
         tradeShipCity={map.get("trade_ship_city")           ?? ""}
         tradeShipState={map.get("trade_ship_state")         ?? ""}
         tradeShipPostalCode={map.get("trade_ship_postal")   ?? ""}
+        supplyCostEnvelope={map.get("supply_cost_envelope")               ?? "0.20"}
+        supplyCostLabel={map.get("supply_cost_label")                     ?? "0.10"}
+        supplyCostPackingSlip={map.get("supply_cost_packing_slip")        ?? "0.02"}
+        supplyCostTapePerInch={map.get("supply_cost_tape_per_inch")       ?? "0"}
+        supplyTapeInchesPerOrder={map.get("supply_tape_inches_per_order") ?? "0"}
         links={links}
         sitePages={sitePages.map(p => ({ id: p.id, path: p.path, label: p.label }))}
         sectionOrder={SECTION_ORDER}

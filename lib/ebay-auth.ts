@@ -44,6 +44,7 @@ const SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.account",
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment",            // mark orders shipped
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",   // read order status
+  "https://api.ebay.com/oauth/api_scope/sell.finances",               // payout amounts for Payout tab
   // NOTE: sell.logistics (quote + buy labels) is a Limited Release scope —
   // requesting it without eBay Developer Program approval makes the whole
   // OAuth handshake fail with invalid_scope. Re-add it only after Mike

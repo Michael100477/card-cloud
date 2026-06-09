@@ -3,7 +3,7 @@ import { requireAdmin, AdminError } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
 import { logger } from "@/lib/logger";
-import { buyLabel, carrierCodeForEbay } from "@/lib/easypost";
+import { buyLabel, carrierCodeForEbay, computeSupplyCost } from "@/lib/easypost";
 
 /**
  * Create a shipping label for a paid order. Two-step flow:
@@ -68,13 +68,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  // 3. Save back to DB and flip status to shipped
+  // 3. Save back to DB and flip status to shipped. The supply-cost snapshot
+  // is captured at this moment so retroactive rate changes don't move
+  // historical numbers in the Payout tab.
+  const supplyCost = await computeSupplyCost();
   const updateData = {
-    status:           "shipped" as const,
-    shippedAt:        new Date(),
-    shippingLabelUrl: label.labelUrl,
-    trackingNumber:   label.trackingNumber,
-    shippingCarrier:  label.carrier,
+    status:              "shipped" as const,
+    shippedAt:           new Date(),
+    shippingLabelUrl:    label.labelUrl,
+    trackingNumber:      label.trackingNumber,
+    shippingCarrier:     label.carrier,
+    shippingPostageCost: label.cost,
+    shippingSupplyCost:  supplyCost,
   };
   if (kind === "internal") await db.internalListing.update({ where: { id }, data: updateData });
   else                     await db.ebayListing.update({ where: { id }, data: updateData });

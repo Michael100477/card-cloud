@@ -16,6 +16,26 @@ async function getCred(service: string): Promise<string | null> {
   return row?.value || null;
 }
 
+async function getSetting(key: string, fallback: number): Promise<number> {
+  const row = await db.siteSetting.findUnique({ where: { key }, select: { value: true } });
+  const v = parseFloat(row?.value ?? "");
+  return isNaN(v) ? fallback : v;
+}
+
+/** Compute the per-shipment supply cost from current settings. Captured as
+ *  a frozen snapshot on each ship-time write so retroactive rate changes
+ *  don't move historical numbers in the Payout tab. */
+export async function computeSupplyCost(): Promise<number> {
+  const [envelope, label, packingSlip, tapePerInch, tapeInches] = await Promise.all([
+    getSetting("supply_cost_envelope",         0.20),
+    getSetting("supply_cost_label",            0.10),
+    getSetting("supply_cost_packing_slip",     0.02),
+    getSetting("supply_cost_tape_per_inch",    0),
+    getSetting("supply_tape_inches_per_order", 0),
+  ]);
+  return Math.round((envelope + label + packingSlip + (tapePerInch * tapeInches)) * 100) / 100;
+}
+
 /** Read all ship-from credential fields and assemble an EasyPost address payload. */
 export async function getShipFromAddress(): Promise<EasyPost.IAddressCreateParameters> {
   const [name, company, street1, street2, city, state, zip, country, phone] = await Promise.all([

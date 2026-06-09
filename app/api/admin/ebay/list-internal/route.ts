@@ -87,6 +87,8 @@ export async function POST(req: NextRequest) {
     insertSet: listing.insertSet,
     printRun: listing.printRun,
     customSpecifics: listing.customSpecifics as { name: string; value: string }[] | null,
+    isLot:     listing.isLot,
+    cardCount: listing.cardCount,
   };
 
   const result = await createEbayListing(input);

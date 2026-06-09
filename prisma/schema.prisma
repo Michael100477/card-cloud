@@ -835,6 +835,12 @@ model InternalListing {
   customSpecifics    Json?
   eventTournament    String?
 
+  // Card-lot mode — when true, this is a multi-card lot rather than a
+  // single card. Auto-sets the eBay category to Trading Card Lots
+  // (183444) and exposes a Number of Cards input.
+  isLot              Boolean   @default(false)
+  cardCount          Int?
+
   // Status & eBay
   // Status flow: draft → active → sold → paid → shipped | ended | scheduled
   status        String   @default("draft")

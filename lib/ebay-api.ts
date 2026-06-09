@@ -563,6 +563,11 @@ export interface EbayListingInput {
   insertSet?:           string | null;
   printRun?:            string | null;
   customSpecifics?:     { name: string; value: string }[] | null;
+  // Card-lot mode — Trading Card Lots (eBay category 183444) requires
+  // a "Number of Cards" item specific. When isLot is true and cardCount
+  // is set, we emit it as part of the aspects payload.
+  isLot?:               boolean;
+  cardCount?:           number | null;
   existingEbayListingId?: string | null;
 }
 
@@ -577,6 +582,10 @@ function buildAspects(input: EbayListingInput): Record<string, string[]> {
   if (input.year)         aspects["Year Manufactured"] = [String(input.year)];
   if (input.season)       aspects["Season"]            = [input.season];
   aspects["Type"] = [input.cardType ?? "Sports Trading Card"];
+  // Trading Card Lots category (183444) requires Number of Cards.
+  if (input.isLot && input.cardCount && input.cardCount > 0) {
+    aspects["Number of Cards"] = [String(input.cardCount)];
+  }
   if (input.cardSize) aspects["Card Size"] = [input.cardSize];
 
   // "Card Condition" (item specific 40001) is required by category 261328.

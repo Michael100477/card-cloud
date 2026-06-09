@@ -217,6 +217,16 @@ export function InternalListingEditor({
   const [purchasePrice, setPurchasePrice] = useState(e?.purchasePrice ? String(e.purchasePrice) : "");
   const [notes, setNotes] = useState(e?.notes ?? "");
 
+  // Card-lot mode — when on, this listing is a bundle of multiple cards
+  // rather than a single card. Auto-switches the eBay category to Trading
+  // Card Lots (183444) and exposes a Number of Cards input.
+  const [isLot, _setIsLot]       = useState<boolean>(e?.isLot ?? false);
+  const [cardCount, setCardCount] = useState<string>(e?.cardCount ? String(e.cardCount) : "");
+  function setIsLot(next: boolean) {
+    _setIsLot(next);
+    patchDraft({ categoryId: next ? "183444" : "261328" });
+  }
+
   // Listing form state — pre-populated from existing listing if editing
   const [draft, setDraft] = useState<ListingDraft>(() => {
     const base = makeEmptyDraft(ebayDefaults);
@@ -605,6 +615,8 @@ export function InternalListingEditor({
         customSpecifics: draft.customSpecifics,
         eventTournament: draft.eventTournament || null,
         upc: draft.upc || null,
+        isLot,
+        cardCount: isLot && cardCount ? parseInt(cardCount, 10) : null,
       };
 
       let id = savedId;
@@ -801,16 +813,47 @@ export function InternalListingEditor({
           </div>
         </div>
 
+        {/* Lot toggle */}
+        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="isLot"
+            checked={isLot}
+            onChange={(e) => setIsLot(e.target.checked)}
+            className="accent-brand h-4 w-4"
+          />
+          <label htmlFor="isLot" className="text-sm text-navy font-medium cursor-pointer select-none flex-1">
+            This listing is a <strong>lot of multiple cards</strong>
+            <span className="text-slate-500 font-normal"> — auto-switches category to Trading Card Lots</span>
+          </label>
+        </div>
+
+        {isLot && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-slate-400 text-xs mb-1 block">Number of Cards *</label>
+              <input
+                value={cardCount}
+                onChange={(e) => setCardCount(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="e.g. 50"
+                inputMode="numeric"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30"
+              />
+              <p className="text-slate-400 text-xs mt-1">Required by eBay for the Trading Card Lots category</p>
+            </div>
+          </div>
+        )}
+
         {/* Player + Year */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-slate-400 text-xs mb-1 block">
-              Player / Athlete *
+              {isLot ? "Featured player (optional)" : "Player / Athlete *"}
             </label>
             <input
               value={player}
               onChange={(e) => setPlayer(e.target.value)}
-              placeholder="e.g. Bo Jackson"
+              placeholder={isLot ? "Leave blank if a mixed lot" : "e.g. Bo Jackson"}
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
           </div>

@@ -120,6 +120,8 @@ export async function PATCH(
   if ("autographedEbay" in body) data.autographedEbay = body.autographedEbay;
   if ("customSpecifics" in body) data.customSpecifics = body.customSpecifics;
   if ("eventTournament" in body) data.eventTournament = body.eventTournament;
+  if ("isLot"           in body) data.isLot           = body.isLot;
+  if ("cardCount"       in body) data.cardCount       = body.cardCount;
 
   const updated = await db.internalListing.update({ where: { id }, data });
   return NextResponse.json({ id: updated.id });

@@ -1645,8 +1645,9 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
               </div>
             )}
 
-            {/* Graded sub-fields */}
-            {draft.conditionType === "graded" && (
+            {/* Graded sub-fields — only for singles (lots are sold as a
+                bundle, not individually graded) */}
+            {draft.categoryId !== "261329" && draft.conditionType === "graded" && (
               <>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -1690,8 +1691,10 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
               </>
             )}
 
-            {/* Ungraded sub-fields */}
-            {draft.conditionType === "ungraded" && (
+            {/* Ungraded "Card condition" sub-field — only for singles. For
+                lots, the Item condition (New / Used) dropdown above is the
+                only condition selector eBay accepts. */}
+            {draft.categoryId !== "261329" && draft.conditionType === "ungraded" && (
               <div>
                 {L("Card condition")}
                 <select

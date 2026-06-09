@@ -699,13 +699,12 @@ function buildAspects(input: EbayListingInput): Record<string, string[]> {
     return map[raw.trim().toLowerCase()] ?? raw;
   };
   if (input.isLot) {
-    // Trading Card Lots (category 183444) requires Card Condition regardless
-    // of whether the lot contains graded cards — eBay treats the lot as a
-    // single product with a single condition value. Default to "Used" since
-    // most lots are pulled from used inventory; the seller can override
-    // through the cardCondition form field.
-    const cc = input.cardCondition?.trim();
-    aspects["Card Condition"] = [cc ? normalizeCardCondition(cc) : "Used"];
+    // Trading Card Lots (category 261329) does NOT use the "Card Condition"
+    // item specific that singles have. Instead the condition lives entirely
+    // on the inventory item's top-level condition enum (NEW / USED_*),
+    // resolved dynamically by resolveLotConditionEnum(). Sending a "Card
+    // Condition" aspect here would either be ignored or rejected as an
+    // invalid aspect for the category, so we omit it entirely for lots.
   } else if (!(input.graded || input.conditionType === "graded")) {
     // For ungraded single cards, Card Condition is the required SELECTION_ONLY
     // aspect. Graded singles don't use Card Condition — they're identified

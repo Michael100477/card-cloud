@@ -234,7 +234,12 @@ export function InternalListingEditor({
       categoryId: next ? "261329" : "261328",
       // Lots ship in a larger envelope/box than singles. 11x6x1 is the typical
       // size for a small/medium card lot in a bubble mailer.
-      ...(next ? { dimLength: "11.0", dimWidth: "6.0", dimHeight: "1.0" } : {}),
+      // Pre-select 'Used' as the lot condition — it's the right answer for
+      // almost every lot Mike sells (bulk/pulled-from-packs inventory).
+      // Singles use the graded/ungraded grading-scale flow, so we leave
+      // cardCondition alone when toggling lot OFF (the form's conditionType
+      // gate handles that side).
+      ...(next ? { dimLength: "11.0", dimWidth: "6.0", dimHeight: "1.0", cardCondition: "Used" } : {}),
     });
   }
 
@@ -373,10 +378,11 @@ export function InternalListingEditor({
       // can describe the lot as a whole).
       if (c.isLot || (typeof c.cardCount === "number" && c.cardCount >= 2)) {
         patchDraft({
-          categoryId: "261329",                // Sports Trading Cards > Trading Card Lots
-          dimLength:  "11.0",                  // lot-specific package defaults — fit
-          dimWidth:   "6.0",                   //   typical bubble mailer
-          dimHeight:  "1.0",
+          categoryId:    "261329",             // Sports Trading Cards > Trading Card Lots
+          dimLength:     "11.0",               // lot-specific package defaults — fit
+          dimWidth:      "6.0",                //   typical bubble mailer
+          dimHeight:     "1.0",
+          cardCondition: "Used",               // sensible default for almost every lot
         });
         _setIsLot(true);                       // also flip the manual toggle on
         if (typeof c.cardCount === "number") setCardCount(String(c.cardCount));

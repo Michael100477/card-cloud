@@ -185,11 +185,13 @@ export function InternalListingEditor({
   const [graded, _setGraded] = useState(e?.graded ?? false);
   // Wrap setGraded so toggling also resets package weight + dimensions to the
   // graded/ungraded defaults from ebayDefaults. Only applies for new listings —
-  // skip the reset when editing an existing listing so we don't overwrite saved values.
+  // skip the reset when editing an existing listing so we don't overwrite saved
+  // values. Also skip when isLot is on — lots have their own 11x6x1 default
+  // applied by setIsLot, and we don't want graded toggling to clobber it.
   function setGraded(next: boolean | ((g: boolean) => boolean)) {
     _setGraded((prev: boolean) => {
       const newGraded = typeof next === "function" ? next(prev) : next;
-      if (!e) {
+      if (!e && !isLot) {
         const ld = ebayDefaults;
         if (newGraded) {
           patchDraft({

@@ -213,8 +213,11 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
                           </>
                         )}
                         {sharedLabelUrl && (
-                          <a href={sharedLabelUrl} target="_blank" rel="noopener noreferrer"
-                             className="text-brand text-xs hover:underline font-medium">
+                          <a
+                            href={`/print/label?label_url=${encodeURIComponent(sharedLabelUrl)}${sharedTracking ? `&tracking=${encodeURIComponent(sharedTracking)}` : ""}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-brand text-xs hover:underline font-medium"
+                          >
                             ↓ Print label
                           </a>
                         )}

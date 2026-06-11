@@ -81,15 +81,25 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
   }
 
   async function markShipped(group: ShippingRow[]) {
-    if (!confirm(`Mark ${group.length === 1 ? "this item" : `all ${group.length} items in this order`} as shipped? Use this if you bought the label outside Card Cloud.`)) return;
+    const itemDesc = group.length === 1 ? "this item" : `all ${group.length} items in this order`;
+    const trackingNumber = prompt(`Paste the tracking number from the label you bought (eBay seller hub, Pirate Ship, etc.).\n\nLeave blank to just mark ${itemDesc} as shipped without tracking.`, "");
+    if (trackingNumber === null) return; // user clicked Cancel
+    const carrier = trackingNumber.trim()
+      ? prompt("Carrier? (USPS, UPS, FedEx, DHL)", "USPS") ?? "USPS"
+      : "";
+
     const primary = group[0];
     const groupKey = primary.ebayOrderId || primary.key;
     setBusy(groupKey);
     try {
       // mark-shipped is still single-item — call for each row in the group.
-      // Most groups have 1 item, so this is usually a single request.
+      // Same tracking + carrier applied to all siblings.
       for (const row of group) {
-        const r = await fetch(`/api/admin/shipping/${row.kind}/${row.id}/mark-shipped`, { method: "POST" });
+        const r = await fetch(`/api/admin/shipping/${row.kind}/${row.id}/mark-shipped`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trackingNumber: trackingNumber.trim() || undefined, carrier }),
+        });
         if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error ?? "Failed"); }
       }
       router.refresh();

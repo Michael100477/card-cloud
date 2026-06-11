@@ -5,8 +5,8 @@ import { syncPayouts } from "./ebay-finances";
 let lastSyncAt = 0;
 const SYNC_TTL_MS = 60_000; // sync at most once per minute
 
-export async function syncOrdersThrottled(): Promise<void> {
-  if (Date.now() - lastSyncAt < SYNC_TTL_MS) return;
+export async function syncOrdersThrottled(opts?: { forceFresh?: boolean }): Promise<void> {
+  if (!opts?.forceFresh && Date.now() - lastSyncAt < SYNC_TTL_MS) return;
   lastSyncAt = Date.now();
   try {
     const r = await syncOrders();

@@ -42,7 +42,20 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err,  setErr]  = useState<Record<string, string>>({});
 
+  const [refreshing, setRefreshing] = useState(false);
   const filtered = rows.filter(r => filter === "ready" ? r.status === "paid" : r.status === "shipped");
+
+  async function refreshFromEbay() {
+    setRefreshing(true);
+    try {
+      const r = await fetch("/api/admin/shipping/refresh", { method: "POST" });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error ?? "Failed"); }
+      router.refresh();
+    } catch (e) {
+      alert(`Refresh failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setRefreshing(false);
+  }
 
   // Group rows by ebayOrderId so items in the same eBay order ship together
   // as one combined label. Items without an order id (rare — usually a sync
@@ -121,10 +134,18 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
             </button>
           ))}
         </div>
-        <Link href="/admin/shipping/new"
-          className="bg-brand text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors whitespace-nowrap">
-          + Create new label
-        </Link>
+        <div className="flex items-center gap-2">
+          <button onClick={refreshFromEbay} disabled={refreshing}
+            className="border border-slate-200 text-navy text-xs font-semibold px-3 py-2 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors whitespace-nowrap"
+            title="Pull the latest fulfillment state from eBay (use this after shipping through eBay seller hub directly)"
+          >
+            {refreshing ? "Syncing…" : "↻ Refresh from eBay"}
+          </button>
+          <Link href="/admin/shipping/new"
+            className="bg-brand text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors whitespace-nowrap">
+            + Create new label
+          </Link>
+        </div>
       </div>
 
       {groups.length === 0 ? (

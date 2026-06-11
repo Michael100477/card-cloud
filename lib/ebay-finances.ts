@@ -33,7 +33,11 @@ export async function getPayoutsForRecentOrders(days: number = 60): Promise<Map<
   catch { return map; }
 
   const sandbox = status.environment !== "production";
-  const apiBase = sandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
+  // NOTE: The Finances API uses its own subdomain (apiz.ebay.com / apiz.sandbox.ebay.com),
+  // NOT the standard api.ebay.com that the other Sell APIs use. The 'z' is part of the
+  // route — eBay split Finances onto a separate gateway. Hitting api.ebay.com returns
+  // 404 with an empty body, which previously made this look like a scope/permission issue.
+  const apiBase = sandbox ? "https://apiz.sandbox.ebay.com" : "https://apiz.ebay.com";
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   // Finances API: getTransactions endpoint, filtered to transactions newer

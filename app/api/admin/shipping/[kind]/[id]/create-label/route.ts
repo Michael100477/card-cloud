@@ -19,7 +19,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
   }
   const { kind, id } = await params;
 
-  // 1. Load the record + buyer address + package size
+  // 1. Load the primary record + buyer address + package size
   const record = kind === "internal"
     ? await db.internalListing.findUnique({ where: { id } })
     : kind === "consignment"
@@ -35,16 +35,38 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
   type Addr = { street1?: string; street2?: string; city?: string; state?: string; postalCode?: string; country?: string };
   const addr = record.buyerAddress as Addr;
 
-  // Package dimensions — only InternalListing has these as columns; consignment
-  // falls back to standard trading-card defaults.
-  type PkgFields = { weightLbs?: number; weightOz?: number | unknown; dimLength?: number | unknown; dimWidth?: number | unknown; dimHeight?: number | unknown };
-  const rec = record as typeof record & PkgFields;
-  const weightLbs = rec.weightLbs ?? 0;
-  const weightOz  = Number(rec.weightOz  ?? 3);
-  const dimLength = Number(rec.dimLength ?? 11);
-  const dimWidth  = Number(rec.dimWidth  ?? 6);
-  const dimHeight = Number(rec.dimHeight ?? 1);
-  const totalOz   = weightLbs * 16 + weightOz;
+  // Find every sibling listing in the same eBay order so a multi-item
+  // purchase ships under ONE label and is marked shipped atomically.
+  // Siblings can be a mix of internal_listings and ebay_listings (Mike sells
+  // his own inventory alongside consignments under the same seller account).
+  const [internalSiblings, consignSiblings] = await Promise.all([
+    db.internalListing.findMany({ where: { ebayOrderId: record.ebayOrderId, status: "paid" } }),
+    db.ebayListing.findMany({     where: { ebayOrderId: record.ebayOrderId, status: "paid" } }),
+  ]);
+
+  // Combine package: sum weights (safer overestimate for postage), keep the
+  // largest per-axis dimension (items stacked flat in a single bubble mailer).
+  // Consignment rows don't carry weight/dims, so fall back to single-card
+  // graded defaults for them.
+  type PkgFields = { weightLbs?: number | null; weightOz?: number | unknown; dimLength?: number | unknown; dimWidth?: number | unknown; dimHeight?: number | unknown };
+  function pkg(r: PkgFields) {
+    return {
+      lbs: r.weightLbs ?? 0,
+      oz:  Number(r.weightOz  ?? 3),
+      l:   Number(r.dimLength ?? 11),
+      w:   Number(r.dimWidth  ?? 6),
+      h:   Number(r.dimHeight ?? 1),
+    };
+  }
+  const allPackages = [
+    ...internalSiblings.map(s => pkg(s)),
+    ...consignSiblings.map(() => pkg({ weightOz: 3, dimLength: 11, dimWidth: 6, dimHeight: 1 })),
+  ];
+  if (allPackages.length === 0) allPackages.push(pkg(record as PkgFields));
+  const totalOz   = allPackages.reduce((s, p) => s + p.lbs * 16 + p.oz, 0);
+  const dimLength = Math.max(...allPackages.map(p => p.l));
+  const dimWidth  = Math.max(...allPackages.map(p => p.w));
+  const dimHeight = Math.max(...allPackages.map(p => p.h));
 
   // 2. Buy label via EasyPost
   let label: Awaited<ReturnType<typeof buyLabel>>;
@@ -68,21 +90,35 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  // 3. Save back to DB and flip status to shipped. The supply-cost snapshot
-  // is captured at this moment so retroactive rate changes don't move
-  // historical numbers in the Payout tab.
+  // 3. Save back to DB and flip status to shipped for EVERY sibling in the
+  // order. The label cost is divided equally across the items so the Payout
+  // tab's per-item net profit reflects each item's share of postage. Supply
+  // cost is also divided so it's not double-counted across siblings.
   const supplyCost = await computeSupplyCost();
+  const siblingCount = internalSiblings.length + consignSiblings.length;
+  const totalItems = Math.max(siblingCount, 1);
+  const postagePerItem = Math.round((label.cost / totalItems) * 100) / 100;
+  const supplyPerItem  = Math.round((supplyCost  / totalItems) * 100) / 100;
   const updateData = {
     status:              "shipped" as const,
     shippedAt:           new Date(),
     shippingLabelUrl:    label.labelUrl,
     trackingNumber:      label.trackingNumber,
     shippingCarrier:     label.carrier,
-    shippingPostageCost: label.cost,
-    shippingSupplyCost:  supplyCost,
+    shippingPostageCost: postagePerItem,
+    shippingSupplyCost:  supplyPerItem,
   };
-  if (kind === "internal") await db.internalListing.update({ where: { id }, data: updateData });
-  else                     await db.ebayListing.update({ where: { id }, data: updateData });
+  await Promise.all([
+    ...internalSiblings.map(s => db.internalListing.update({ where: { id: s.id }, data: updateData })),
+    ...consignSiblings.map(s  => db.ebayListing.update({     where: { id: s.id }, data: updateData })),
+  ]);
+  // Fallback: if no siblings were found (defensive — record should always be
+  // in the sibling list since we filtered by its own ebayOrderId), update
+  // the primary record so the user-facing flow still completes.
+  if (siblingCount === 0) {
+    if (kind === "internal") await db.internalListing.update({ where: { id }, data: { ...updateData, shippingPostageCost: label.cost, shippingSupplyCost: supplyCost } });
+    else                     await db.ebayListing.update({     where: { id }, data: { ...updateData, shippingPostageCost: label.cost, shippingSupplyCost: supplyCost } });
+  }
 
   // 4. Tell eBay the order is fulfilled (this notifies the buyer with tracking).
   // Non-fatal — if this fails the label is already saved and admin can paste

@@ -41,6 +41,7 @@ export default async function AdminShippingPage() {
       ebayOrderId:   l.ebayOrderId,
       ebayListingId: l.ebayListingId,
       buyerName:     l.buyerName,
+      buyerUsername: l.buyerUsername,
       buyerAddress:  l.buyerAddress as Address | null,
       weightOz:      Number(l.weightOz),
       dimLength:     Number(l.dimLength),
@@ -64,6 +65,7 @@ export default async function AdminShippingPage() {
       ebayOrderId:   l.ebayOrderId,
       ebayListingId: l.ebayListingId,
       buyerName:     l.buyerName,
+      buyerUsername: l.buyerUsername,
       buyerAddress:  l.buyerAddress as Address | null,
       // Consignment listings don't carry their own weight/dims — use sensible defaults
       weightOz:      3,

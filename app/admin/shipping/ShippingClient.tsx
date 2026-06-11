@@ -24,6 +24,7 @@ export interface ShippingRow {
   ebayOrderId: string | null;
   ebayListingId: string | null;
   buyerName: string | null;
+  buyerUsername: string | null;
   buyerAddress: Address | null;
   weightOz: number;
   dimLength: number;
@@ -43,27 +44,55 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
 
   const filtered = rows.filter(r => filter === "ready" ? r.status === "paid" : r.status === "shipped");
 
-  async function createLabel(row: ShippingRow) {
-    setBusy(row.key);
-    setErr(p => ({ ...p, [row.key]: "" }));
+  // Group rows by ebayOrderId so items in the same eBay order ship together
+  // as one combined label. Items without an order id (rare — usually a sync
+  // gap) each get their own group keyed on row id so they still render.
+  const groups: ShippingRow[][] = (() => {
+    const map = new Map<string, ShippingRow[]>();
+    for (const r of filtered) {
+      const key = r.ebayOrderId || `__solo_${r.key}`;
+      const existing = map.get(key) ?? [];
+      existing.push(r);
+      map.set(key, existing);
+    }
+    return [...map.values()].sort((a, b) => {
+      const latestA = a.reduce((m, x) => (x.paidAt ?? "") > m ? (x.paidAt ?? "") : m, "");
+      const latestB = b.reduce((m, x) => (x.paidAt ?? "") > m ? (x.paidAt ?? "") : m, "");
+      return latestB.localeCompare(latestA);
+    });
+  })();
+
+  async function createLabel(group: ShippingRow[]) {
+    // Use the first item in the group as the entry point. The backend cascades
+    // by ebayOrderId to mark every sibling shipped under the same tracking.
+    const primary = group[0];
+    const groupKey = primary.ebayOrderId || primary.key;
+    setBusy(groupKey);
+    setErr(p => ({ ...p, [groupKey]: "" }));
     try {
-      const r = await fetch(`/api/admin/shipping/${row.kind}/${row.id}/create-label`, { method: "POST" });
+      const r = await fetch(`/api/admin/shipping/${primary.kind}/${primary.id}/create-label`, { method: "POST" });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? `Failed (${r.status})`);
       router.refresh();
     } catch (e) {
-      setErr(p => ({ ...p, [row.key]: String(e) }));
+      setErr(p => ({ ...p, [groupKey]: String(e) }));
     }
     setBusy(null);
   }
 
-  async function markShipped(row: ShippingRow) {
-    if (!confirm("Mark this item as shipped? Use this if you bought the label outside Card Cloud.")) return;
-    setBusy(row.key);
+  async function markShipped(group: ShippingRow[]) {
+    if (!confirm(`Mark ${group.length === 1 ? "this item" : `all ${group.length} items in this order`} as shipped? Use this if you bought the label outside Card Cloud.`)) return;
+    const primary = group[0];
+    const groupKey = primary.ebayOrderId || primary.key;
+    setBusy(groupKey);
     try {
-      const r = await fetch(`/api/admin/shipping/${row.kind}/${row.id}/mark-shipped`, { method: "POST" });
-      if (r.ok) router.refresh();
-      else { const d = await r.json().catch(() => ({})); alert(d.error ?? "Failed"); }
+      // mark-shipped is still single-item — call for each row in the group.
+      // Most groups have 1 item, so this is usually a single request.
+      for (const row of group) {
+        const r = await fetch(`/api/admin/shipping/${row.kind}/${row.id}/mark-shipped`, { method: "POST" });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error ?? "Failed"); }
+      }
+      router.refresh();
     } catch (e) {
       alert(String(e));
     }
@@ -88,7 +117,7 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
         </Link>
       </div>
 
-      {filtered.length === 0 ? (
+      {groups.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
           <p className="text-slate-400 text-sm">
             {filter === "ready"
@@ -101,7 +130,7 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
               <tr>
-                <th className="text-left px-5 py-3">Card</th>
+                <th className="text-left px-5 py-3">Cards</th>
                 <th className="text-left px-5 py-3">Buyer</th>
                 <th className="text-left px-5 py-3">Package</th>
                 <th className="text-left px-5 py-3">Sale</th>
@@ -109,67 +138,94 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r, i) => (
-                <tr key={r.key} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                  <td className="px-5 py-3 align-top">
-                    <p className="text-navy font-medium break-words">{r.title || <span className="italic">Draft</span>}</p>
-                    {r.ebayListingId && (
-                      <p className="text-slate-400 text-xs mt-0.5">
-                        eBay #{r.ebayListingId}{" "}
-                        <a href={`https://www.ebay.com/itm/${r.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-3 align-top text-xs">
-                    <p className="text-navy font-medium">{r.buyerName ?? "—"}</p>
-                    {r.buyerAddress ? (
-                      <>
-                        <p className="text-slate-500">{r.buyerAddress.street1}{r.buyerAddress.street2 ? `, ${r.buyerAddress.street2}` : ""}</p>
-                        <p className="text-slate-500">
-                          {r.buyerAddress.city}{r.buyerAddress.state ? `, ${r.buyerAddress.state}` : ""} {r.buyerAddress.postalCode}
-                          {r.buyerAddress.country && r.buyerAddress.country !== "US" ? ` · ${r.buyerAddress.country}` : ""}
+              {groups.map((group, i) => {
+                const sample      = group[0];
+                const groupKey    = sample.ebayOrderId || sample.key;
+                const totalPrice  = group.reduce((s, r) => s + (r.soldPrice ?? 0), 0);
+                // Combined package: sum weights (more conservative for postage
+                // rate), keep the LARGEST per-axis dim — items stacked flat in
+                // one bubble mailer.
+                const combinedOz  = group.reduce((s, r) => s + (r.weightOz ?? 0), 0);
+                const combinedL   = Math.max(...group.map(r => r.dimLength));
+                const combinedW   = Math.max(...group.map(r => r.dimWidth));
+                const combinedH   = Math.max(...group.map(r => r.dimHeight));
+                const latestPaid  = group.reduce<string | null>((m, x) =>
+                  x.paidAt && (!m || x.paidAt > m) ? x.paidAt : m, null);
+                const latestShipped = group.reduce<string | null>((m, x) =>
+                  x.shippedAt && (!m || x.shippedAt > m) ? x.shippedAt : m, null);
+                const sharedLabelUrl = group.find(r => r.shippingLabelUrl)?.shippingLabelUrl ?? null;
+                const sharedTracking = group.find(r => r.trackingNumber)?.trackingNumber ?? null;
+                return (
+                  <tr key={`group-${groupKey}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                    <td className="px-5 py-3 align-top">
+                      {group.length > 1 && (
+                        <p className="text-amber-700 text-xs font-semibold mb-1 uppercase tracking-wide">
+                          Combined order — {group.length} items
                         </p>
-                      </>
-                    ) : <p className="text-slate-400">Address not yet synced</p>}
-                  </td>
-                  <td className="px-5 py-3 align-top text-xs">
-                    <p className="text-navy">{r.weightOz} oz</p>
-                    <p className="text-slate-400">{r.dimLength}″ × {r.dimWidth}″ × {r.dimHeight}″</p>
-                    <p className="text-slate-400 mt-0.5">{(r.soldPrice ?? 0) <= 50 ? "→ eBay Standard Envelope" : "→ USPS Ground Advantage"}</p>
-                  </td>
-                  <td className="px-5 py-3 align-top text-xs">
-                    {r.soldPrice != null ? <p className="text-navy font-medium">${usd(r.soldPrice)}</p> : null}
-                    {r.paidAt    ? <p className="text-slate-400">Paid {new Date(r.paidAt).toLocaleDateString()}</p> : null}
-                    {r.shippedAt ? <p className="text-green-600">Shipped {new Date(r.shippedAt).toLocaleDateString()}</p> : null}
-                  </td>
-                  <td className="px-5 py-3 align-top">
-                    <div className="flex flex-col gap-1.5 items-start">
-                      {filter === "ready" && (
+                      )}
+                      {group.map((r, j) => (
+                        <div key={r.key} className={j > 0 ? "mt-2 pt-2 border-t border-slate-200" : ""}>
+                          <p className="text-navy font-medium break-words">{r.title || <span className="italic">Draft</span>}</p>
+                          {r.ebayListingId && (
+                            <p className="text-slate-400 text-xs mt-0.5">
+                              eBay #{r.ebayListingId}{" "}
+                              <a href={`https://www.ebay.com/itm/${r.ebayListingId}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">View →</a>
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </td>
+                    <td className="px-5 py-3 align-top text-xs">
+                      <p className="text-navy font-medium">{sample.buyerName ?? sample.buyerUsername ?? "—"}</p>
+                      {sample.buyerAddress ? (
                         <>
-                          <button onClick={() => createLabel(r)} disabled={busy === r.key}
-                            className="bg-brand text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-600 disabled:opacity-50">
-                            {busy === r.key ? "Working…" : "Create label"}
-                          </button>
-                          <button onClick={() => markShipped(r)} disabled={busy === r.key}
-                            className="text-slate-400 text-xs hover:text-navy">
-                            Mark as shipped
-                          </button>
-                          {err[r.key] && <p className="text-red-500 text-xs max-w-[200px] leading-tight">{err[r.key].slice(0, 200)}</p>}
+                          <p className="text-slate-500">{sample.buyerAddress.street1}{sample.buyerAddress.street2 ? `, ${sample.buyerAddress.street2}` : ""}</p>
+                          <p className="text-slate-500">
+                            {sample.buyerAddress.city}{sample.buyerAddress.state ? `, ${sample.buyerAddress.state}` : ""} {sample.buyerAddress.postalCode}
+                            {sample.buyerAddress.country && sample.buyerAddress.country !== "US" ? ` · ${sample.buyerAddress.country}` : ""}
+                          </p>
                         </>
-                      )}
-                      {r.shippingLabelUrl && (
-                        <a href={r.shippingLabelUrl} target="_blank" rel="noopener noreferrer"
-                           className="text-brand text-xs hover:underline font-medium">
-                          ↓ Print label
-                        </a>
-                      )}
-                      {r.trackingNumber && (
-                        <p className="text-slate-400 text-xs">Tracking: <span className="text-navy font-mono">{r.trackingNumber}</span></p>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      ) : <p className="text-slate-400">Address not yet synced</p>}
+                    </td>
+                    <td className="px-5 py-3 align-top text-xs">
+                      <p className="text-navy">{combinedOz.toFixed(1)} oz</p>
+                      <p className="text-slate-400">{combinedL}″ × {combinedW}″ × {combinedH}″</p>
+                      <p className="text-slate-400 mt-0.5">{totalPrice <= 50 ? "→ eBay Standard Envelope" : "→ USPS Ground Advantage"}</p>
+                    </td>
+                    <td className="px-5 py-3 align-top text-xs">
+                      <p className="text-navy font-medium">${usd(totalPrice)}</p>
+                      {latestPaid    ? <p className="text-slate-400">Paid {new Date(latestPaid).toLocaleDateString()}</p> : null}
+                      {latestShipped ? <p className="text-green-600">Shipped {new Date(latestShipped).toLocaleDateString()}</p> : null}
+                    </td>
+                    <td className="px-5 py-3 align-top">
+                      <div className="flex flex-col gap-1.5 items-start">
+                        {filter === "ready" && (
+                          <>
+                            <button onClick={() => createLabel(group)} disabled={busy === groupKey}
+                              className="bg-brand text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-600 disabled:opacity-50">
+                              {busy === groupKey ? "Working…" : group.length > 1 ? `Create label (${group.length} items)` : "Create label"}
+                            </button>
+                            <button onClick={() => markShipped(group)} disabled={busy === groupKey}
+                              className="text-slate-400 text-xs hover:text-navy">
+                              Mark as shipped
+                            </button>
+                            {err[groupKey] && <p className="text-red-500 text-xs max-w-[200px] leading-tight">{err[groupKey].slice(0, 200)}</p>}
+                          </>
+                        )}
+                        {sharedLabelUrl && (
+                          <a href={sharedLabelUrl} target="_blank" rel="noopener noreferrer"
+                             className="text-brand text-xs hover:underline font-medium">
+                            ↓ Print label
+                          </a>
+                        )}
+                        {sharedTracking && (
+                          <p className="text-slate-400 text-xs">Tracking: <span className="text-navy font-mono">{sharedTracking}</span></p>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -177,5 +233,3 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
     </div>
   );
 }
-
-

@@ -1019,8 +1019,8 @@ export function ListingsClient({
           const rate = (l as Listing).graded ? commissionGraded : commissionRaw;
           return s + ((l.soldPrice ?? 0) * rate / 100);
         }, 0);
-        // Net to Mike = (internal: payout - postage - supplies) + (consignment: commission)
-        const netToMike = all.reduce((s, l) => {
+        // Net Earnings = (internal: payout - postage - supplies) + (consignment: commission)
+        const netEarnings = all.reduce((s, l) => {
           if (l.kind === "internal") {
             return s + ((l.ebayPayoutAmount ?? 0) - (l.shippingPostageCost ?? 0) - (l.shippingSupplyCost ?? 0));
           } else {
@@ -1045,7 +1045,7 @@ export function ListingsClient({
               <div><p className="text-slate-400 text-xs uppercase tracking-wide">eBay payouts</p>     <p className="text-navy font-semibold mt-0.5">${usd(totalPayout)}</p></div>
               <div><p className="text-slate-400 text-xs uppercase tracking-wide">Postage</p>          <p className="text-navy font-semibold mt-0.5">${usd(totalPostage)}</p></div>
               <div><p className="text-slate-400 text-xs uppercase tracking-wide">Supplies</p>         <p className="text-navy font-semibold mt-0.5">${usd(totalSupplies)}</p></div>
-              <div><p className="text-slate-400 text-xs uppercase tracking-wide">Net to Mike</p>      <p className="text-green-700 font-bold text-base mt-0.5">${usd(netToMike)}</p></div>
+              <div><p className="text-slate-400 text-xs uppercase tracking-wide">Net Earnings</p>      <p className="text-green-700 font-bold text-base mt-0.5">${usd(netEarnings)}</p></div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
@@ -1058,7 +1058,7 @@ export function ListingsClient({
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Postage</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Supplies</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Commission</th>
-                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Net to Mike</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Net Earnings</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Consignor</th>
                   </tr>
                 </thead>

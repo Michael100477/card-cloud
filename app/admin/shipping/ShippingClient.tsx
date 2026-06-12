@@ -19,6 +19,7 @@ export interface ShippingRow {
   title: string | null;
   status: string;
   soldPrice: number | null;
+  soldAt: string | null;
   paidAt: string | null;
   shippedAt: string | null;
   ebayOrderId: string | null;
@@ -163,6 +164,7 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
               <tr>
                 <th className="text-left px-5 py-3">Cards</th>
                 <th className="text-left px-5 py-3">Buyer</th>
+                <th className="text-left px-5 py-3 whitespace-nowrap">Sold</th>
                 <th className="text-left px-5 py-3">Package</th>
                 <th className="text-left px-5 py-3">Sale</th>
                 <th className="px-5 py-3" />
@@ -184,6 +186,8 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
                   x.paidAt && (!m || x.paidAt > m) ? x.paidAt : m, null);
                 const latestShipped = group.reduce<string | null>((m, x) =>
                   x.shippedAt && (!m || x.shippedAt > m) ? x.shippedAt : m, null);
+                const earliestSold  = group.reduce<string | null>((m, x) =>
+                  x.soldAt && (!m || x.soldAt < m) ? x.soldAt : m, null);
                 const sharedLabelUrl = group.find(r => r.shippingLabelUrl)?.shippingLabelUrl ?? null;
                 const sharedTracking = group.find(r => r.trackingNumber)?.trackingNumber ?? null;
                 return (
@@ -217,6 +221,9 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
                           </p>
                         </>
                       ) : <p className="text-slate-400">Address not yet synced</p>}
+                    </td>
+                    <td className="px-5 py-3 align-top text-xs text-slate-600 whitespace-nowrap">
+                      {earliestSold ? new Date(earliestSold).toLocaleDateString() : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-5 py-3 align-top text-xs">
                       <p className="text-navy">{combinedOz.toFixed(1)} oz</p>

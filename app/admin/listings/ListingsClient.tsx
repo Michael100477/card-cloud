@@ -1049,17 +1049,17 @@ export function ListingsClient({
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm" style={{ minWidth: "900px" }}>
                 <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                   <tr>
-                    <th className="text-left  px-4 py-3">Card</th>
-                    <th className="text-right px-3 py-3 whitespace-nowrap">Sale</th>
-                    <th className="text-right px-3 py-3 whitespace-nowrap">eBay payout</th>
-                    <th className="text-right px-3 py-3 whitespace-nowrap">Postage</th>
-                    <th className="text-right px-3 py-3 whitespace-nowrap">Supplies</th>
-                    <th className="text-right px-3 py-3 whitespace-nowrap">Commission</th>
-                    <th className="text-right px-3 py-3 whitespace-nowrap">Net to Mike</th>
-                    <th className="text-right px-3 py-3 whitespace-nowrap">Consignor</th>
+                    <th className="text-left  px-4 py-3"                                style={{ whiteSpace: "normal"  }}>Card</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Sale</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>eBay payout</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Postage</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Supplies</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Commission</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Net to Mike</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Consignor</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1086,17 +1086,17 @@ export function ListingsClient({
                             {l.ebayListingId ? ` · eBay #${l.ebayListingId}` : ""}
                           </p>
                         </td>
-                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap">${usd(sale)}</td>
-                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap">
+                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>${usd(sale)}</td>
+                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>
                           {payout != null ? `$${usd(payout)}` : <span className="text-slate-400 italic text-xs">syncing…</span>}
                         </td>
-                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap">${usd(postage)}</td>
-                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap">${usd(supplies)}</td>
-                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap">
+                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>${usd(postage)}</td>
+                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>${usd(supplies)}</td>
+                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>
                           {isConsign ? `$${usd(commission)} (${rate}%)` : "—"}
                         </td>
-                        <td className="px-3 py-3 align-top text-right text-green-700 font-semibold whitespace-nowrap">${usd(net)}</td>
-                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap">
+                        <td className="px-3 py-3 align-top text-right text-green-700 font-semibold whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>${usd(net)}</td>
+                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>
                           {consignor != null ? `$${usd(consignor)}` : isConsign ? <span className="text-slate-400 italic text-xs">syncing…</span> : "—"}
                         </td>
                       </tr>

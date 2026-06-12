@@ -860,7 +860,7 @@ export function ListingsClient({
                 <tr>
                   <th className="text-left px-5 py-3">Card</th>
                   <th className="text-left px-5 py-3">Buyer</th>
-                  <th className="text-left px-5 py-3 whitespace-nowrap">Sold on</th>
+                  <th className="text-left px-5 py-3 whitespace-nowrap">Sold</th>
                   <th className="text-left px-5 py-3">Sale</th>
                   <th className="text-left px-5 py-3">Shipping</th>
                   <th className="px-5 py-3" />
@@ -1057,7 +1057,7 @@ export function ListingsClient({
                 <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                   <tr>
                     <th className="text-left  px-4 py-3"                                style={{ whiteSpace: "normal"  }}>Card</th>
-                    <th className="text-left  px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Sold on</th>
+                    <th className="text-left  px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Sold</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Sale</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>eBay payout</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Postage</th>

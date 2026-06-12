@@ -5,6 +5,85 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-06-12 — Massive session: lot listings end-to-end, scheduling bug, combined shipping, Finances API subdomain, Sold + clickable tracking, eBay Logistics application
+
+**Why:** A real-world day of selling lots end-to-end exposed a chain of issues across the lot-listing flow, the scheduling logic, the Payout tab data path, and the shipping page. Plus a half-day debug rabbit hole on the Finances API turned out to be a single-character mistake in the subdomain (`api.ebay.com` vs `apiz.ebay.com`).
+
+### Lot listings — full UX cleanup
+- **Toggle UI improvements:** when `setIsLot(true)` fires, the form now also patches `dimLength/Width/Height` to 11.0/6.0/1.0 (bubble-mailer default) and `cardCondition` to "Used" so lot-shipments and condition come pre-filled. `categoryId` flips to 261329 (the actual leaf for "Sports Trading Cards > Trading Card Lots") — not 183444, which we previously hardcoded but turned out to be an intermediate node (commits `ccedada`, `cdccf2b`).
+- **Item condition dropdown** rewritten — eBay's lot category uses New/Used with eBay's exact verbatim descriptions, not the singles grading scale (Near Mint / Excellent / Very Good / Poor). When `categoryId === '261329'`, the form shows ONLY the simple Item condition selector; Condition type, Graded sub-fields, and the singles Card condition dropdown are all hidden (commits `1fa5613`, `72b1bee`, `cdccf2b`).
+- **Backend condition handling** for lots now uses `apiz`-aware `resolveLotConditionEnum()` that queries `get_item_condition_policies` for the actual category, picks a valid conditionId from the available list (1000/NEW, 3000/USED_EXCELLENT, 4000/USED_VERY_GOOD, 5000/USED_GOOD, 6000/USED_ACCEPTABLE), and constructs the right enum string. Stops sending the singles' "Card Condition" aspect for lots since the lot category doesn't accept it (commits `64ec2dd`, `24b048f`).
+- **Lot contents textarea** now optional — earlier client-side gate blocked Generate when empty, which was wrong. Made the field truly optional with a fallback prompt block on the server (commits `30658d4`, `136fe05`).
+- **Generate prompt strengthening:** lot description generator now wraps the seller's card list in a loud delimiter and explicit instruction so the AI can't miss it ("Reproduce EVERY line below as its own bullet point — do not summarize or skip any"). System prompt rules also tightened (commits `e10f873`, `30658d4`).
+- **Smart dimension preservation:** `setGraded()` was silently overwriting lot dimensions back to 10x4x1 (the ungraded singles default). Added `!isLot` guard so setGraded skips the reset when the lot toggle is on. `setAutographed()` also gets the same 11x6x1 dimension bump when toggled on (commits `33c2d75`, `6495614`).
+- **Defaults for raw cards** — `cardCondition` now initializes to "Excellent" for new ungraded singles (instead of empty), so the seller doesn't have to pick it every time (commit `77799cf`).
+
+### Settings → Rates → Shipping
+- Renamed section header from "Shipping costs" → **"Shipping"** (broader scope now includes listing-form defaults).
+- New **"Default shipping type for new listings"** dropdown at the top with three options: Flat / Calculated / Free. Stored as the new `default_shipping_type` setting (commit `2c7d574`).
+- When set to **Flat**, every new internal listing auto-pre-fills `shippingCostType` to "Flat rate" AND the `flatRateShipping` amount with the Bubble mailer Min cost value from the same section. End-to-end: pick "Flat" in Settings once, no per-listing setup needed.
+
+### Scheduling bug — listings published immediately
+- **Two compounding bugs** caused "schedule this listing for 10pm" to silently publish immediately:
+  1. ScheduleWidget defaults were only local state; `draft.scheduledTime` stayed empty unless the user touched a picker. Save logic then resolved to null (commit `c8d7cf5`).
+  2. `listOnEbay()` didn't call `saveDraft()` first, so the API read the DB which still had the pre-toggle state (commit `8223e8d`).
+- Combined: toggle scheduling on → defaults auto-commit → click List → draft saves with `scheduledTime` populated → eBay receives `listingStartDate` and queues the listing.
+
+### Combined-order shipping
+- Shipping admin page (`/admin/shipping`) was showing each paid item as its own row with its own Create Label button — even when multiple items shipped to the same buyer in the same eBay order. The eBay Listings → Waiting to be Shipped tab already grouped by buyer; the two pages were inconsistent (commit `958b10e`).
+- UI now groups rows by `ebayOrderId`. Shows an amber "Combined order — N items" banner. Combined Package shows sum(weight) and max(L/W/H). Single "Create label (N items)" button per group.
+- Backend `create-label` route loads ALL paid siblings (internal + consignment) sharing the primary record's `ebayOrderId`, combines weight + dims, buys ONE label via EasyPost, updates every sibling with same tracking + status='shipped'. Postage + supply cost split evenly across siblings so the Payout tab's per-item net profit reflects each item's share.
+- **Print Label link** now uses the formatted `/print/label?label_url=...&tracking=...` route instead of EasyPost's raw PDF — so labels print correctly on the bottom-half-sticker paper layout for combined orders too (commit `76c0abd`).
+
+### Mark as shipped → tracking input
+- `markShipped()` UI now prompts for tracking number + carrier (USPS default) when user clicks. Mark-shipped endpoint accepts optional `{trackingNumber, carrier}` body and persists both. Works for shipments bought outside Card Cloud (eBay seller hub, Pirate Ship) so the Shipped tab and tracking link still populate correctly (commit `d25135e`).
+- Iterates the combined-order group so the same tracking applies to every sibling row.
+
+### Background sync + Refresh button
+- New `Refresh from eBay` button next to "+ Create new label" — POSTs to `/api/admin/shipping/refresh` which calls `syncOrdersThrottled({ forceFresh: true })` bypassing the 60s throttle (commit `e9358f0`).
+- `instrumentation.ts` register() hook now sets up a `setInterval` that fires `syncOrdersThrottled({ forceFresh: true })` every 5 minutes, with a 10s startup timeout for the first sync. Logs `[bg-sync] sync complete at <timestamp>` per fire (commit `b0b75d3`).
+- Guards: skip when `NEXT_RUNTIME !== 'nodejs'` (Edge runtime would waste the interval), skip during `NEXT_PHASE === 'phase-production-build'`. Single-instance assumption — fine for current Railway setup.
+
+### eBay Finances API subdomain (the BIG one)
+- After reconnecting eBay with the OAuth consent including sell.finances, every Finances API call still returned 404 with empty body. Spent considerable time on this as a scope issue (revoke + reconnect, force consent screen, check granted scopes list) — all confirmed correct.
+- **Real cause: the Finances API lives on `apiz.ebay.com` (with a `z`), not `api.ebay.com`.** eBay split it onto a separate gateway. Single-character fix in `lib/ebay-finances.ts` (commit `b354d5e`).
+- Verified with live token: `seller_funds_summary` returns $315.03 total funds, `payout` returns real payouts including a $128.60 on 2026-06-10, `transaction` returns SHIPPING_LABEL + SALE + fee transactions per order.
+
+### Finances sync — orderId field + pro-rating
+- Two more bugs surfaced once the API was reachable (commit `827893e`):
+  1. `orderId` is a top-level field on each transaction, not inside `references[]`. Old code matched zero transactions.
+  2. Old transaction categorization missed SHIPPING_LABEL and any non-fee DEBIT. New rule: any CREDIT increases the order payout, any DEBIT decreases it (also tracked as fee vs refund for reporting).
+- For multi-item orders (one buyer bought several cards in the same order), the order-level payout now pro-rates across items by each item's share of gross sale. Two-item order with $89 + $84 sales and $150 payout → item 1 gets $77.10, item 2 gets $72.90. Single-item orders unchanged.
+
+### Payout tab UI fixes
+- Renamed **"Net to Mike"** → **"Net Earnings"** (generic UI copy, no personal references) (commit `e61e399`).
+- Header text wrapping fix — Postage/Supplies/Commission/Consignor headers were breaking mid-word ("Postag" + "e") and dollar values like $135.83 were wrapping too. Added `whitespace-nowrap` via both Tailwind classes AND inline `style={{whiteSpace:'nowrap'}}` plus set table `min-width: 1000px` so columns can't be squeezed (commits `900d91c`, `a35f51e`).
+
+### Sold date column + clickable tracking
+- Added **Sold** date column to: Shipped tab (`/admin/listings`), Payout tab (`/admin/listings`), and Shipping page (`/admin/shipping`) — same header text across all three for consistency (commits `8c4b41d`, `53fb24e`, `28786bd`).
+- Tracking numbers on the Shipping page (Shipped filter) now render as clickable links to the carrier's tracking page — same behavior the eBay Listings → Shipped tab already had. Extracted `trackingUrl(carrier, tracking)` helper to `lib/tracking.ts` so both pages use the same logic (USPS, UPS, FedEx, DHL recognized; falls back to 17track.net) (commit `86e496c`).
+
+### eBay Logistics API application
+- Submitted an Application Growth Check ticket (#260612-000021) requesting Sell Logistics API access so Card Cloud can buy **eBay Standard Envelope** labels directly. eBay's $1.29 Standard Envelope is exclusive to Sell Logistics API (verified — not available through EasyPost, Shippo, or Pirate Ship).
+- Standard 1-2 week eBay review window. One-time reminder scheduled (cloud routine `trig_01EVzfkHW8x5MGUJvHY77xdg`) for Monday 2026-06-15 at 9 AM EDT to check status.
+- When approved, integration plan: re-add `sell.logistics` to SCOPES, revoke + reconnect the eBay app on the operator side, build `lib/ebay-shipping.ts` that wraps `POST /sell/logistics/v1_beta/shipping_quote` and `POST /sell/logistics/v1_beta/shipment`. Important gotcha to remember: **Logistics API also uses `apiz.ebay.com`** (same as Finances).
+
+### Memory entries added
+- `reference_ebay_app_access.md` — stable URL for revoking eBay app grants to force OAuth re-consent
+- `feedback_no_personalization.md` — UI labels AND documentation copy stay generic (no first-name references anywhere)
+- `feedback_tab_consistency.md` — same field = same header text on every admin tab; grep existing UI before inventing a new label
+
+### Other small fixes
+- `set ConsignmentOrderAdmin.tsx` — fixed React duplicate-key warning on the category dropdown (used `c.label` which had duplicates / empties; now uses `c.id`) (commit `ffc1ac0`).
+- Quieted the `[ebay-deletion]` log noise — set `EBAY_DELETION_VERBOSE=1` to re-enable when debugging (commit `ccedada`).
+- Migrated 4 existing draft lot listings from `categoryId='183444'` → `'261329'` via SQL (one-time data fix matching the code change).
+
+### Outstanding from this session
+- EasyPost account is locked out (password reset emails not arriving). Operator will email support and/or proceed via eBay seller hub manually until Sell Logistics API is approved.
+- 3 most-recent eBay-shipped orders reset to 'paid' status via SQL so they can re-buy real labels once shipping is unblocked (combined order `18-14740-25482` + 50-card lot `12-14740-54115`).
+
+---
+
 ## 2026-06-09 — Cost tracking + Payout tab (per-item net-profit reporting)
 
 **Why:** Mike wants to see the actual margin on every shipment — sale price minus eBay fees minus shipping postage minus packing supplies, broken out per item, with consignment commission applied for consignment sales.

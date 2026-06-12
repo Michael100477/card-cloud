@@ -1052,14 +1052,14 @@ export function ListingsClient({
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                   <tr>
-                    <th className="text-left px-4 py-3">Card</th>
-                    <th className="text-right px-3 py-3">Sale</th>
-                    <th className="text-right px-3 py-3">eBay payout</th>
-                    <th className="text-right px-3 py-3">Postage</th>
-                    <th className="text-right px-3 py-3">Supplies</th>
-                    <th className="text-right px-3 py-3">Commission</th>
-                    <th className="text-right px-3 py-3">Net to Mike</th>
-                    <th className="text-right px-3 py-3">Consignor</th>
+                    <th className="text-left  px-4 py-3">Card</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap">Sale</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap">eBay payout</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap">Postage</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap">Supplies</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap">Commission</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap">Net to Mike</th>
+                    <th className="text-right px-3 py-3 whitespace-nowrap">Consignor</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1086,17 +1086,17 @@ export function ListingsClient({
                             {l.ebayListingId ? ` · eBay #${l.ebayListingId}` : ""}
                           </p>
                         </td>
-                        <td className="px-3 py-3 align-top text-right text-navy">${usd(sale)}</td>
-                        <td className="px-3 py-3 align-top text-right text-navy">
+                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap">${usd(sale)}</td>
+                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap">
                           {payout != null ? `$${usd(payout)}` : <span className="text-slate-400 italic text-xs">syncing…</span>}
                         </td>
-                        <td className="px-3 py-3 align-top text-right text-slate-600">${usd(postage)}</td>
-                        <td className="px-3 py-3 align-top text-right text-slate-600">${usd(supplies)}</td>
-                        <td className="px-3 py-3 align-top text-right text-slate-600">
+                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap">${usd(postage)}</td>
+                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap">${usd(supplies)}</td>
+                        <td className="px-3 py-3 align-top text-right text-slate-600 whitespace-nowrap">
                           {isConsign ? `$${usd(commission)} (${rate}%)` : "—"}
                         </td>
-                        <td className="px-3 py-3 align-top text-right text-green-700 font-semibold">${usd(net)}</td>
-                        <td className="px-3 py-3 align-top text-right text-navy">
+                        <td className="px-3 py-3 align-top text-right text-green-700 font-semibold whitespace-nowrap">${usd(net)}</td>
+                        <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap">
                           {consignor != null ? `$${usd(consignor)}` : isConsign ? <span className="text-slate-400 italic text-xs">syncing…</span> : "—"}
                         </td>
                       </tr>

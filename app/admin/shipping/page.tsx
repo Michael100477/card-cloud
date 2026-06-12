@@ -50,6 +50,7 @@ export default async function AdminShippingPage() {
       dimHeight:     Number(l.dimHeight),
       shippingLabelUrl: l.shippingLabelUrl,
       trackingNumber:   l.trackingNumber,
+      shippingCarrier:  l.shippingCarrier,
     })),
     ...consign.map(l => ({
       key:           `consign-${l.id}`,
@@ -76,6 +77,7 @@ export default async function AdminShippingPage() {
       dimHeight:     1,
       shippingLabelUrl: l.shippingLabelUrl,
       trackingNumber:   l.trackingNumber,
+      shippingCarrier:  l.shippingCarrier,
     })),
   ].sort((a, b) => (b.paidAt ?? "").localeCompare(a.paidAt ?? ""));
 

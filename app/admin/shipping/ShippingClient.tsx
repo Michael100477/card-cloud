@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { trackingUrl } from "@/lib/tracking";
 
 interface Address {
   street1?: string; street2?: string; city?: string;
@@ -33,6 +34,7 @@ export interface ShippingRow {
   dimHeight: number;
   shippingLabelUrl: string | null;
   trackingNumber: string | null;
+  shippingCarrier: string | null;
 }
 
 const usd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -190,6 +192,7 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
                   x.soldAt && (!m || x.soldAt < m) ? x.soldAt : m, null);
                 const sharedLabelUrl = group.find(r => r.shippingLabelUrl)?.shippingLabelUrl ?? null;
                 const sharedTracking = group.find(r => r.trackingNumber)?.trackingNumber ?? null;
+                const sharedCarrier  = group.find(r => r.shippingCarrier)?.shippingCarrier ?? null;
                 return (
                   <tr key={`group-${groupKey}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                     <td className="px-5 py-3 align-top">
@@ -260,7 +263,16 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
                           </a>
                         )}
                         {sharedTracking && (
-                          <p className="text-slate-400 text-xs">Tracking: <span className="text-navy font-mono">{sharedTracking}</span></p>
+                          <p className="text-slate-400 text-xs">
+                            {sharedCarrier ? `${sharedCarrier}: ` : "Tracking: "}
+                            <a
+                              href={trackingUrl(sharedCarrier, sharedTracking)}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-brand font-mono hover:underline"
+                            >
+                              {sharedTracking}
+                            </a>
+                          </p>
                         )}
                       </div>
                     </td>

@@ -6,10 +6,13 @@ import { getAccessToken, getEbayConnectionStatus } from "./ebay-auth";
 
 interface EbayTransaction {
   transactionId:    string;
-  transactionType:  string;     // SALE, REFUND, NON_SALE_CHARGE, etc.
+  transactionType:  string;     // SALE, REFUND, NON_SALE_CHARGE, SHIPPING_LABEL, etc.
   bookingEntry:     string;     // CREDIT or DEBIT
   amount?:          { value?: string; currency?: string };
-  references?:      Array<{ referenceId?: string; referenceType?: string }>;  // referenceType: ORDER_ID
+  // orderId is a TOP-LEVEL field on every transaction tied to an order
+  // (eBay docs imply references[] is for some types but this is the
+  // actually-populated field — empirically references is undefined).
+  orderId?:         string;
   feeType?:         string;
   feeJurisdiction?: string;
 }
@@ -61,24 +64,24 @@ export async function getPayoutsForRecentOrders(days: number = 60): Promise<Map<
     if (txns.length === 0) break;
 
     for (const t of txns) {
-      const orderRef = t.references?.find(r => r.referenceType === "ORDER_ID")?.referenceId;
+      const orderRef = t.orderId;
       if (!orderRef) continue;
       const amt = parseFloat(t.amount?.value ?? "0");
       if (!isFinite(amt)) continue;
 
       const cur = map.get(orderRef) ?? { payoutAmount: 0, feeAmount: 0, refundAmount: 0 };
 
-      // eBay Finances reports CREDIT for incoming money (sale), DEBIT for
-      // outgoing (fees, refunds). The payout for an order = sales credits
-      // minus all debits.
-      if (t.transactionType === "SALE" && t.bookingEntry === "CREDIT") {
+      // eBay Finances reports CREDIT for incoming money to seller (sale,
+      // refund-from-buyer), DEBIT for outgoing (final value fees, ad fees,
+      // shipping labels bought through eBay, refund issued to buyer, etc.).
+      // The net payout for an order = all CREDITs minus all DEBITs.
+      // We also categorize DEBITs as either fees or refunds for reporting.
+      if (t.bookingEntry === "CREDIT") {
         cur.payoutAmount += amt;
-      } else if (t.transactionType === "REFUND") {
-        cur.refundAmount += amt;
+      } else if (t.bookingEntry === "DEBIT") {
         cur.payoutAmount -= amt;
-      } else if (t.transactionType === "NON_SALE_CHARGE" || t.feeType) {
-        cur.feeAmount    += amt;
-        cur.payoutAmount -= amt;
+        if (t.transactionType === "REFUND") cur.refundAmount += amt;
+        else                                cur.feeAmount    += amt;
       }
       map.set(orderRef, cur);
     }
@@ -92,8 +95,10 @@ export async function getPayoutsForRecentOrders(days: number = 60): Promise<Map<
 }
 
 /** Save payout amounts onto each matching internal_listing / ebay_listing
- *  row. Idempotent — only updates rows whose stored values differ from the
- *  fresh eBay numbers. */
+ *  row. For multi-item orders (e.g. one buyer bought 2 cards in the same
+ *  order), the order-level payout is pro-rated across items by their share
+ *  of the order's gross sale. Idempotent — only updates rows whose stored
+ *  values differ from the fresh eBay numbers. */
 export async function syncPayouts(): Promise<{ updated: number; ordersFetched: number }> {
   const payouts = await getPayoutsForRecentOrders();
   if (payouts.size === 0) return { updated: 0, ordersFetched: 0 };
@@ -113,29 +118,53 @@ export async function syncPayouts(): Promise<{ updated: number; ordersFetched: n
     }),
   ]);
 
-  for (const row of internal) {
-    const p = payouts.get(row.ebayOrderId!);
-    if (!p) continue;
-    const newPayout = Math.round(p.payoutAmount * 100) / 100;
-    const newFee    = Math.round(p.feeAmount    * 100) / 100;
-    if (row.ebayPayoutAmount?.toString() === newPayout.toString()) continue;
-    await db.internalListing.update({
-      where: { id: row.id },
-      data:  { ebayPayoutAmount: newPayout, ebayFeeAmount: newFee },
-    });
-    updated++;
+  // Group items by order so we can pro-rate the order's payout / fees by
+  // each item's share of the gross sale total. For single-item orders this
+  // simplifies to "the whole payout/fee goes to that one item."
+  type Row = { id: string; ebayOrderId: string | null; soldPrice: { toString(): string } | number | null };
+  const byOrder = new Map<string, { internal: Row[]; consign: Row[]; totalSale: number }>();
+  for (const r of internal) {
+    if (!r.ebayOrderId) continue;
+    const g = byOrder.get(r.ebayOrderId) ?? { internal: [], consign: [], totalSale: 0 };
+    g.internal.push(r);
+    g.totalSale += r.soldPrice ? Number(r.soldPrice) : 0;
+    byOrder.set(r.ebayOrderId, g);
   }
-  for (const row of consign) {
-    const p = payouts.get(row.ebayOrderId!);
+  for (const r of consign) {
+    if (!r.ebayOrderId) continue;
+    const g = byOrder.get(r.ebayOrderId) ?? { internal: [], consign: [], totalSale: 0 };
+    g.consign.push(r);
+    g.totalSale += r.soldPrice ? Number(r.soldPrice) : 0;
+    byOrder.set(r.ebayOrderId, g);
+  }
+
+  for (const [orderId, group] of byOrder) {
+    const p = payouts.get(orderId);
     if (!p) continue;
-    const newPayout = Math.round(p.payoutAmount * 100) / 100;
-    const newFee    = Math.round(p.feeAmount    * 100) / 100;
-    if (row.ebayPayoutAmount?.toString() === newPayout.toString()) continue;
-    await db.ebayListing.update({
-      where: { id: row.id },
-      data:  { ebayPayoutAmount: newPayout, ebayFeeAmount: newFee },
-    });
-    updated++;
+    const denom = group.totalSale > 0
+      ? group.totalSale
+      : (group.internal.length + group.consign.length); // even split fallback
+
+    const applyShare = (sale: number) => {
+      const share = group.totalSale > 0 ? sale / denom : 1 / denom;
+      return {
+        ebayPayoutAmount: Math.round(p.payoutAmount * share * 100) / 100,
+        ebayFeeAmount:    Math.round(p.feeAmount    * share * 100) / 100,
+      };
+    };
+
+    for (const row of group.internal) {
+      const sale = row.soldPrice ? Number(row.soldPrice) : 0;
+      const { ebayPayoutAmount, ebayFeeAmount } = applyShare(sale);
+      await db.internalListing.update({ where: { id: row.id }, data: { ebayPayoutAmount, ebayFeeAmount } });
+      updated++;
+    }
+    for (const row of group.consign) {
+      const sale = row.soldPrice ? Number(row.soldPrice) : 0;
+      const { ebayPayoutAmount, ebayFeeAmount } = applyShare(sale);
+      await db.ebayListing.update({ where: { id: row.id }, data: { ebayPayoutAmount, ebayFeeAmount } });
+      updated++;
+    }
   }
 
   return { updated, ordersFetched: payouts.size };

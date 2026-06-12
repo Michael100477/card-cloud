@@ -860,6 +860,7 @@ export function ListingsClient({
                 <tr>
                   <th className="text-left px-5 py-3">Card</th>
                   <th className="text-left px-5 py-3">Buyer</th>
+                  <th className="text-left px-5 py-3 whitespace-nowrap">Sold on</th>
                   <th className="text-left px-5 py-3">Sale</th>
                   <th className="text-left px-5 py-3">Shipping</th>
                   <th className="px-5 py-3" />
@@ -891,6 +892,9 @@ export function ListingsClient({
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
+                      </td>
+                      <td className="px-5 py-3 align-top text-xs whitespace-nowrap text-slate-600">
+                        {l.soldAt ? new Date(l.soldAt).toLocaleDateString() : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-5 py-3 align-top">
                         {l.soldPrice != null && <p className="text-navy font-medium text-xs">${usd(l.soldPrice)}</p>}
@@ -1049,10 +1053,11 @@ export function ListingsClient({
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
-              <table className="w-full text-sm" style={{ minWidth: "900px" }}>
+              <table className="w-full text-sm" style={{ minWidth: "1000px" }}>
                 <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                   <tr>
                     <th className="text-left  px-4 py-3"                                style={{ whiteSpace: "normal"  }}>Card</th>
+                    <th className="text-left  px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Sold on</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Sale</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>eBay payout</th>
                     <th className="text-right px-3 py-3 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>Postage</th>
@@ -1085,6 +1090,9 @@ export function ListingsClient({
                             {isConsign ? "Consignment" : "Internal"}{isConsign && (l as Listing).graded ? " · Graded" : isConsign ? " · Raw" : ""}
                             {l.ebayListingId ? ` · eBay #${l.ebayListingId}` : ""}
                           </p>
+                        </td>
+                        <td className="px-3 py-3 align-top text-xs text-slate-600 whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>
+                          {l.soldAt ? new Date(l.soldAt).toLocaleDateString() : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>${usd(sale)}</td>
                         <td className="px-3 py-3 align-top text-right text-navy whitespace-nowrap" style={{ whiteSpace: "nowrap" }}>

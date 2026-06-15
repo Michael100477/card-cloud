@@ -1,0 +1,32 @@
+{
+  "_comment": "Edit this file to tweak which keywords the discovery agent searches. Each one becomes a separate FB groups search. Add or remove freely.",
+  "keywords": [
+    "sports cards",
+    "trading cards",
+    "trading card collectors",
+    "baseball cards",
+    "football cards",
+    "basketball cards",
+    "hockey cards",
+    "soccer cards",
+    "Pokemon cards",
+    "Pokemon TCG collectors",
+    "Magic the Gathering collectors",
+    "Yu-Gi-Oh cards",
+    "vintage card collectors",
+    "PSA graded cards",
+    "wrestling cards",
+    "golf cards",
+    "Lorcana collectors"
+  ],
+  "thresholds": {
+    "min_members": 50000,
+    "_min_members_comment": "Minimum member count to keep in results. Set to 0 to keep everything for inspection.",
+    "very_active_bonus": 50000,
+    "_very_active_bonus_comment": "Score boost for groups FB tags as 'Very active'. Bumps a 60K-member-very-active above a 100K-member-quiet group."
+  },
+  "scroll_passes": 8,
+  "_scroll_passes_comment": "How many End-key presses per search. More = more results loaded but slower.",
+  "throttle_ms": [2500, 4500],
+  "_throttle_ms_comment": "[min, max] random pause between actions in milliseconds. Slower = more human-like, less detection risk."
+}

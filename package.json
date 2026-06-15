@@ -21,7 +21,11 @@
     "service:logs": "pm2 logs",
     "db:studio": "npx prisma studio",
     "db:migrate": "npx prisma migrate dev",
-    "db:generate": "npx prisma generate"
+    "db:generate": "npx prisma generate",
+    "discover:facebook:auth": "tsx scripts/social-discovery/auth.ts",
+    "discover:facebook": "tsx scripts/social-discovery/discover-facebook.ts",
+    "discover:facebook:append": "powershell -ExecutionPolicy Bypass -File scripts/social-discovery/append-to-workbook.ps1",
+    "discover:facebook:full": "npm run discover:facebook && npm run discover:facebook:append"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.94.0",
@@ -60,6 +64,7 @@
     "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "playwright": "^1.61.0",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "typescript": "^5"

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
 import { logger } from "@/lib/logger";
 import { buyLabel, carrierCodeForEbay, computeSupplyCost } from "@/lib/easypost";
+import { decrementShippingSupplies } from "@/lib/shipping-supplies";
 
 /**
  * Create a shipping label for a paid order. Two-step flow:
@@ -120,7 +121,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
     else                     await db.ebayListing.update({     where: { id }, data: { ...updateData, shippingPostageCost: label.cost, shippingSupplyCost: supplyCost } });
   }
 
-  // 4. Tell eBay the order is fulfilled (this notifies the buyer with tracking).
+  // 4. Decrement supply inventory — one envelope, one label, one packing
+  // slip per shipment regardless of how many siblings are in the
+  // combined-order group.
+  await decrementShippingSupplies();
+
+  // 5. Tell eBay the order is fulfilled (this notifies the buyer with tracking).
   // Non-fatal — if this fails the label is already saved and admin can paste
   // the tracking number into eBay's seller hub manually.
   const ebayStatus = await getEbayConnectionStatus();

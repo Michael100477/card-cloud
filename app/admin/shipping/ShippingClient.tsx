@@ -39,7 +39,9 @@ export interface ShippingRow {
 
 const usd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
+interface LowSupply { label: string; count: number; threshold: number }
+
+export function ShippingClient({ rows, lowSupplies = [] }: { rows: ShippingRow[]; lowSupplies?: LowSupply[] }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"ready" | "shipped">("ready");
   const [busy, setBusy] = useState<string | null>(null);
@@ -109,14 +111,22 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
     setBusy(groupKey);
     try {
       // mark-shipped is still single-item — call for each row in the group.
-      // Same tracking + carrier applied to all siblings.
+      // Same tracking + carrier applied to all siblings. consumeSupplies=true
+      // only on the FIRST call so a combined-order group still only consumes
+      // one envelope + one label + one packing slip total.
+      let isFirst = true;
       for (const row of group) {
         const r = await fetch(`/api/admin/shipping/${row.kind}/${row.id}/mark-shipped`, {
-          method: "POST",
+          method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trackingNumber: trackingNumber.trim() || undefined, carrier }),
+          body:    JSON.stringify({
+            trackingNumber:  trackingNumber.trim() || undefined,
+            carrier,
+            consumeSupplies: isFirst,
+          }),
         });
         if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error ?? "Failed"); }
+        isFirst = false;
       }
       router.refresh();
     } catch (e) {
@@ -127,6 +137,27 @@ export function ShippingClient({ rows }: { rows: ShippingRow[] }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Low-stock supplies banner */}
+      {lowSupplies.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+          <span className="text-2xl leading-none">⚠</span>
+          <div className="flex-1">
+            <p className="text-amber-900 font-semibold text-sm">Low on shipping supplies</p>
+            <p className="text-amber-800 text-xs mt-1">
+              {lowSupplies.map((s, i) => (
+                <span key={s.label}>
+                  {i > 0 ? " · " : ""}
+                  <span className="font-semibold">{s.label}:</span> {s.count} left (alert at {s.threshold})
+                </span>
+              ))}
+            </p>
+            <Link href="/admin/settings#shipping" className="text-amber-900 text-xs underline hover:no-underline mt-1 inline-block">
+              Update inventory in Settings → Rates → Shipping →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Filter tabs + new-label button */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">

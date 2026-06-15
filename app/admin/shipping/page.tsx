@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { syncOrdersThrottled } from "@/lib/ebay-sync-cache";
 import { ShippingClient } from "./ShippingClient";
+import { getLowSupplies } from "@/lib/shipping-supplies";
 
 interface Address {
   street1?: string; street2?: string; city?: string;
@@ -10,6 +11,8 @@ interface Address {
 export default async function AdminShippingPage() {
   // Pull paid-or-shipped orders into the DB before rendering so the table reflects reality.
   await syncOrdersThrottled();
+
+  const lowSupplies = await getLowSupplies();
 
   const [internal, consign] = await Promise.all([
     db.internalListing.findMany({
@@ -90,7 +93,7 @@ export default async function AdminShippingPage() {
       <p className="text-slate-400 text-sm mb-6">
         {readyCount} ready to ship · {shippedCount} shipped
       </p>
-      <ShippingClient rows={rows} />
+      <ShippingClient rows={rows} lowSupplies={lowSupplies.map(s => ({ label: s.label, count: s.count, threshold: s.threshold }))} />
     </div>
   );
 }

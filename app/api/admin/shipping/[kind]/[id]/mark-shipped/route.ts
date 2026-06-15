@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, AdminError } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { decrementShippingSupplies } from "@/lib/shipping-supplies";
 
 interface MarkShippedBody {
-  trackingNumber?: string;
-  carrier?: string;
+  trackingNumber?:  string;
+  carrier?:         string;
+  /** True = decrement supply inventory (envelope, label, packing slip) once.
+   *  Default true. Combined-order groups call mark-shipped per item but
+   *  consume one set of supplies total, so the UI sends false for items 2..N
+   *  in the same group. */
+  consumeSupplies?: boolean;
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ kind: string; id: string }> }) {
@@ -28,5 +34,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ kin
   if (kind === "internal")           await db.internalListing.update({ where: { id }, data });
   else if (kind === "consignment")   await db.ebayListing.update({ where: { id }, data });
   else return NextResponse.json({ error: "Unknown kind" }, { status: 400 });
+
+  // Decrement supply inventory unless caller explicitly opted out (combined
+  // order groups send consumeSupplies=false on items 2..N).
+  if (body.consumeSupplies !== false) {
+    await decrementShippingSupplies();
+  }
   return NextResponse.json({ ok: true });
 }

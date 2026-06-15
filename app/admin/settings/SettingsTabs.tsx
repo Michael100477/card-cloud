@@ -27,6 +27,9 @@ interface Props {
   tradeShipCity: string; tradeShipState: string; tradeShipPostalCode: string;
   supplyCostEnvelope: string; supplyCostLabel: string; supplyCostPackingSlip: string;
   supplyCostTapePerInch: string; supplyTapeInchesPerOrder: string;
+  supplyInvEnvelope: string; supplyInvEnvelopeThreshold: string;
+  supplyInvLabel: string; supplyInvLabelThreshold: string;
+  supplyInvPackingSlip: string; supplyInvPackingSlipThreshold: string;
   defaultShippingType: string;
   // Links props
   links: SiteLink[];

@@ -66,6 +66,12 @@ export default async function AdminSettingsPage() {
         supplyCostPackingSlip={map.get("supply_cost_packing_slip")        ?? "0.02"}
         supplyCostTapePerInch={map.get("supply_cost_tape_per_inch")       ?? "0"}
         supplyTapeInchesPerOrder={map.get("supply_tape_inches_per_order") ?? "0"}
+        supplyInvEnvelope={map.get("supply_inventory_envelope")                       ?? "0"}
+        supplyInvEnvelopeThreshold={map.get("supply_inventory_envelope_threshold")    ?? "10"}
+        supplyInvLabel={map.get("supply_inventory_label")                             ?? "0"}
+        supplyInvLabelThreshold={map.get("supply_inventory_label_threshold")          ?? "10"}
+        supplyInvPackingSlip={map.get("supply_inventory_packing_slip")                ?? "0"}
+        supplyInvPackingSlipThreshold={map.get("supply_inventory_packing_slip_threshold") ?? "10"}
         defaultShippingType={map.get("default_shipping_type") ?? "flat"}
         links={links}
         sitePages={sitePages.map(p => ({ id: p.id, path: p.path, label: p.label }))}

@@ -121,13 +121,16 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
   const [supSaving,   setSupSaving]   = useState(false);
 
   // Shipping supply inventory + low-stock thresholds. Decremented by 1 each
-  // on every shipment (see lib/shipping-supplies.ts).
+  // on every shipment (see lib/shipping-supplies.ts). Lives in its own
+  // section below shipping costs, with its own save state.
   const [invEnv,      setInvEnv]      = useState(supplyInvEnvelope);
   const [invEnvT,     setInvEnvT]     = useState(supplyInvEnvelopeThreshold);
   const [invLabel,    setInvLabel]    = useState(supplyInvLabel);
   const [invLabelT,   setInvLabelT]   = useState(supplyInvLabelThreshold);
   const [invPack,     setInvPack]     = useState(supplyInvPackingSlip);
   const [invPackT,    setInvPackT]    = useState(supplyInvPackingSlipThreshold);
+  const [invSaved,    setInvSaved]    = useState(false);
+  const [invSaving,   setInvSaving]   = useState(false);
 
   useEffect(() => {
     if (params.get("ebay_connected")) setEbayMsg({ type: "success", text: "eBay account connected successfully!" });
@@ -231,15 +234,21 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
       saveSetting("supply_cost_packing_slip",      supPack),
       saveSetting("supply_cost_tape_per_inch",     supTapeIn),
       saveSetting("supply_tape_inches_per_order",  supTapeCnt),
-      // Inventory counts + thresholds
-      saveSetting("supply_inventory_envelope",             invEnv),
-      saveSetting("supply_inventory_envelope_threshold",   invEnvT),
-      saveSetting("supply_inventory_label",                invLabel),
-      saveSetting("supply_inventory_label_threshold",      invLabelT),
-      saveSetting("supply_inventory_packing_slip",         invPack),
-      saveSetting("supply_inventory_packing_slip_threshold", invPackT),
     ]);
     setSupSaving(false); setSupSaved(true); setTimeout(() => setSupSaved(false), 2500);
+  }
+
+  async function saveSupplyInventory() {
+    setInvSaving(true);
+    await Promise.all([
+      saveSetting("supply_inventory_envelope",                invEnv),
+      saveSetting("supply_inventory_envelope_threshold",      invEnvT),
+      saveSetting("supply_inventory_label",                   invLabel),
+      saveSetting("supply_inventory_label_threshold",         invLabelT),
+      saveSetting("supply_inventory_packing_slip",            invPack),
+      saveSetting("supply_inventory_packing_slip_threshold",  invPackT),
+    ]);
+    setInvSaving(false); setInvSaved(true); setTimeout(() => setInvSaved(false), 2500);
   }
 
   return (
@@ -596,7 +605,7 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
           </div>
         </div>
 
-        <div className="bg-slate-50 rounded-xl p-4 mb-6 text-sm">
+        <div className="bg-slate-50 rounded-xl p-4 mb-4 text-sm">
           <p className="text-slate-500 text-xs mb-1">Per-shipment supply cost (preview):</p>
           <p className="text-navy font-semibold">
             ${(
@@ -608,67 +617,75 @@ export function SettingsClient({ withPhotos, withoutPhotos, exchangeStandard, ex
           </p>
         </div>
 
-        {/* ── Supplies inventory ── */}
-        <div className="border-t border-slate-100 pt-5 mb-5">
-          <h3 className="text-navy font-semibold mb-1">Supplies inventory</h3>
-          <p className="text-slate-400 text-sm mb-4">
-            How many of each supply you have on hand. Each shipment decrements
-            one envelope, one label sheet, and one packing slip automatically.
-            When a count drops at or below its &quot;Alert at&quot; threshold,
-            a low-stock banner shows up on the Shipping page.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Envelopes */}
-            <div className={`rounded-xl p-4 ${parseInt(invEnv || "0") <= parseInt(invEnvT || "0") ? "bg-amber-50 border border-amber-200" : "bg-slate-50"}`}>
-              <p className="text-navy font-semibold text-sm mb-2">Envelopes</p>
-              <label className="text-slate-500 text-xs mb-1 block">In stock</label>
-              <input type="number" min="0" step="1" value={invEnv} onChange={e => setInvEnv(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 mb-2" />
-              <label className="text-slate-500 text-xs mb-1 block">Alert at</label>
-              <input type="number" min="0" step="1" value={invEnvT} onChange={e => setInvEnvT(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
-              {parseInt(invEnv || "0") <= parseInt(invEnvT || "0") && (
-                <p className="text-amber-700 text-xs mt-2 font-semibold">⚠ Low stock</p>
-              )}
-            </div>
-
-            {/* Label sheets */}
-            <div className={`rounded-xl p-4 ${parseInt(invLabel || "0") <= parseInt(invLabelT || "0") ? "bg-amber-50 border border-amber-200" : "bg-slate-50"}`}>
-              <p className="text-navy font-semibold text-sm mb-2">Label sheets</p>
-              <label className="text-slate-500 text-xs mb-1 block">In stock</label>
-              <input type="number" min="0" step="1" value={invLabel} onChange={e => setInvLabel(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 mb-2" />
-              <label className="text-slate-500 text-xs mb-1 block">Alert at</label>
-              <input type="number" min="0" step="1" value={invLabelT} onChange={e => setInvLabelT(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
-              {parseInt(invLabel || "0") <= parseInt(invLabelT || "0") && (
-                <p className="text-amber-700 text-xs mt-2 font-semibold">⚠ Low stock</p>
-              )}
-            </div>
-
-            {/* Packing slip sheets */}
-            <div className={`rounded-xl p-4 ${parseInt(invPack || "0") <= parseInt(invPackT || "0") ? "bg-amber-50 border border-amber-200" : "bg-slate-50"}`}>
-              <p className="text-navy font-semibold text-sm mb-2">Packing slip sheets</p>
-              <label className="text-slate-500 text-xs mb-1 block">In stock</label>
-              <input type="number" min="0" step="1" value={invPack} onChange={e => setInvPack(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 mb-2" />
-              <label className="text-slate-500 text-xs mb-1 block">Alert at</label>
-              <input type="number" min="0" step="1" value={invPackT} onChange={e => setInvPackT(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
-              {parseInt(invPack || "0") <= parseInt(invPackT || "0") && (
-                <p className="text-amber-700 text-xs mt-2 font-semibold">⚠ Low stock</p>
-              )}
-            </div>
-          </div>
-        </div>
-
         <div className="flex items-center gap-3">
           <button onClick={saveSupplyCosts} disabled={supSaving}
             className="bg-brand text-white font-semibold px-5 py-2 rounded-xl text-sm hover:bg-blue-600 disabled:opacity-50">
             {supSaving ? "Saving…" : "Save supply costs"}
           </button>
           {supSaved && <span className="text-green-600 text-sm">✓ Saved</span>}
+        </div>
+      </div>
+
+      {/* ── Shipping supplies ── */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-6">
+        <h2 className="text-navy font-semibold mb-1">Shipping supplies</h2>
+        <p className="text-slate-400 text-sm mb-5">
+          How many of each supply you have on hand. Each shipment decrements
+          one envelope, one label sheet, and one packing slip automatically.
+          When a count drops at or below its &quot;Alert at&quot; threshold, a
+          low-stock banner shows up on the Shipping page.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+          {/* Envelopes */}
+          <div className={`rounded-xl p-4 ${parseInt(invEnv || "0") <= parseInt(invEnvT || "0") ? "bg-amber-50 border border-amber-200" : "bg-slate-50"}`}>
+            <p className="text-navy font-semibold text-sm mb-2">Envelopes</p>
+            <label className="text-slate-500 text-xs mb-1 block">In stock</label>
+            <input type="number" min="0" step="1" value={invEnv} onChange={e => setInvEnv(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 mb-2" />
+            <label className="text-slate-500 text-xs mb-1 block">Alert at</label>
+            <input type="number" min="0" step="1" value={invEnvT} onChange={e => setInvEnvT(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            {parseInt(invEnv || "0") <= parseInt(invEnvT || "0") && (
+              <p className="text-amber-700 text-xs mt-2 font-semibold">⚠ Low stock</p>
+            )}
+          </div>
+
+          {/* Label sheets */}
+          <div className={`rounded-xl p-4 ${parseInt(invLabel || "0") <= parseInt(invLabelT || "0") ? "bg-amber-50 border border-amber-200" : "bg-slate-50"}`}>
+            <p className="text-navy font-semibold text-sm mb-2">Label sheets</p>
+            <label className="text-slate-500 text-xs mb-1 block">In stock</label>
+            <input type="number" min="0" step="1" value={invLabel} onChange={e => setInvLabel(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 mb-2" />
+            <label className="text-slate-500 text-xs mb-1 block">Alert at</label>
+            <input type="number" min="0" step="1" value={invLabelT} onChange={e => setInvLabelT(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            {parseInt(invLabel || "0") <= parseInt(invLabelT || "0") && (
+              <p className="text-amber-700 text-xs mt-2 font-semibold">⚠ Low stock</p>
+            )}
+          </div>
+
+          {/* Packing slip sheets */}
+          <div className={`rounded-xl p-4 ${parseInt(invPack || "0") <= parseInt(invPackT || "0") ? "bg-amber-50 border border-amber-200" : "bg-slate-50"}`}>
+            <p className="text-navy font-semibold text-sm mb-2">Packing slip sheets</p>
+            <label className="text-slate-500 text-xs mb-1 block">In stock</label>
+            <input type="number" min="0" step="1" value={invPack} onChange={e => setInvPack(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30 mb-2" />
+            <label className="text-slate-500 text-xs mb-1 block">Alert at</label>
+            <input type="number" min="0" step="1" value={invPackT} onChange={e => setInvPackT(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            {parseInt(invPack || "0") <= parseInt(invPackT || "0") && (
+              <p className="text-amber-700 text-xs mt-2 font-semibold">⚠ Low stock</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button onClick={saveSupplyInventory} disabled={invSaving}
+            className="bg-brand text-white font-semibold px-5 py-2 rounded-xl text-sm hover:bg-blue-600 disabled:opacity-50">
+            {invSaving ? "Saving…" : "Save supplies"}
+          </button>
+          {invSaved && <span className="text-green-600 text-sm">✓ Saved</span>}
         </div>
       </div>
 

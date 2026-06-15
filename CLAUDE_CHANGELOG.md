@@ -5,6 +5,59 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-06-15 — AI Lab documentation pass + Facebook Group Discovery agent groundwork
+
+**Why:** The AI Lab is the platform's nerve center for everything LLM-driven (vision, agents, email, messages, training), and it's matured to seven distinct sub-areas without a unified description anywhere. Operator asked for a documentation pass. Plus, ground-laying for the Facebook Group Discovery agent — the first agent that needs to run LOCAL to the operator's machine (Playwright + saved FB session), which forces an architecture decision about how scheduled local runs are dispatched from a cloud-hosted admin UI.
+
+### AI Lab overview (new content in CardCloud_SiteOverview.docx)
+
+Seven sub-areas under `/admin/ai-lab/`:
+
+- **Models** — Local Ollama model management. Lists installed + currently-loaded models, VRAM usage. Pull/load/unload from the UI. Vision models power raw card recognition and photo-fix.
+- **Testing** — Sandbox prompt-against-any-model playground. Used to tune before wiring workflows into production.
+- **Photo Fix (Card Photo Straightener)** — Upload phone photo of a card; AI detects edges, corrects rotation, crops with clean border. Used for seller-uploaded inventory photos AND training data prep.
+- **Photo Training** — Gallery of training examples (category, face, diagnosis, descriptor properties, reference template). Powers raw card recognition fine-tuning.
+- **Email** — Email agent dashboard. Watches IMAP support inbox, auto-replies with Claude Haiku + card-collecting policy prompt. Categorizes incoming (questions, complaints, consignment inquiries, etc.).
+- **Messages** — Unified inbox: eBay buyer messages + support email side-by-side. Background monitor pings every 5 min, emails alert when anything needs action. No auto-replies on eBay (policy).
+- **Agents** — Configurable automated scripts with Run Now and cron Schedule controls. Current roster:
+  - eBay Training Data Collector (slab photo + metadata scraping)
+  - TCDB Set Scraper (card images + metadata from tcdb.com)
+  - New Set Monitor (scans Cardboard Connection + Beckett News for new set announcements)
+  - TCDB Availability Checker (daily sweep — marks queued sets ready to scrape at ≥70% image coverage)
+  - Email Inbox Poller (IMAP support inbox)
+  - Raw Card Recognition Agent (Ollama vision model identifies ungraded cards from photos)
+  - **Facebook Group Discovery (NEW today)** — Headed Playwright browser searches FB by keyword for large active card-collecting groups; appends results to the Communities workbook
+- **Training Data table** — Backing store for the AI training pipeline. Overview dashboard surfaces counts by source + verified flag.
+
+### Local agent runner architecture (in-flight)
+
+Most AI Lab agents need to run LOCAL to the operator's Windows machine — Playwright (Facebook), Ollama (vision), IMAP (email). Railway can't execute those. So agents follow a pull-based pattern:
+
+1. **Admin UI** sets a "pending" flag in `site_setting` (key `agent_<id>_run_pending` or `agent_<id>_schedule_cron`).
+2. **Local agent runner** (Node.js daemon running on operator's machine via PM2 or scheduled task) polls Card Cloud every minute via authenticated API.
+3. **When a pending request is seen,** the runner spawns the corresponding script with the saved options.
+4. **The runner posts results back** to Card Cloud's API — final status + log text — and the admin UI refreshes to show the result.
+
+Built in this session: AGENTS array entry for Facebook Group Discovery, `/api/ai-lab/agents/run` and `/api/ai-lab/agents/schedule` endpoints (both store state in site_setting). Local agent runner itself is the next deliverable.
+
+### Facebook Group Discovery — current state
+
+Already shipped earlier this session as a standalone Playwright-based discovery agent (`scripts/social-discovery/`). Runs in three modes:
+- **One-shot manual:** `npm run discover:facebook` from a terminal
+- **One-shot full (discovery + workbook append):** `npm run discover:facebook:full`
+- **Scheduled via Windows Task Scheduler:** `schedule-discovery.ps1` registers a weekly headed run, default 6 PM Sunday (chosen to match the operator's normal FB usage hours so the activity pattern isn't anomalous to FB's risk detection)
+
+Today's groundwork makes the same agent invokable from the admin UI once the local runner is wired up.
+
+**Files changed:**
+- `app/admin/ai-lab/agents/page.tsx` — added Facebook Group Discovery to AGENTS
+- `app/api/ai-lab/agents/run/route.ts` (new) — Run Now endpoint
+- `app/api/ai-lab/agents/schedule/route.ts` (new) — Schedule endpoint
+- `CLAUDE_CHANGELOG.md` — this entry
+- (Word docs updated separately via `content-strategy/update-worddocs-ailab-2026-06-15.ps1`)
+
+---
+
 ## 2026-06-12 — Massive session: lot listings end-to-end, scheduling bug, combined shipping, Finances API subdomain, Sold + clickable tracking, eBay Logistics application
 
 **Why:** A real-world day of selling lots end-to-end exposed a chain of issues across the lot-listing flow, the scheduling logic, the Payout tab data path, and the shipping page. Plus a half-day debug rabbit hole on the Finances API turned out to be a single-character mistake in the subdomain (`api.ebay.com` vs `apiz.ebay.com`).

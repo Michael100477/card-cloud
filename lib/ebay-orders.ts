@@ -301,11 +301,11 @@ export async function syncSoldListings(): Promise<{ created: number; updated: nu
   const [internal, consign] = await Promise.all([
     db.internalListing.findMany({
       where:  { ebayListingId: { in: ids } },
-      select: { id: true, ebayListingId: true, buyerUsername: true, soldAt: true, soldPrice: true, title: true },
+      select: { id: true, ebayListingId: true, buyerUsername: true, soldAt: true, soldPrice: true, title: true, status: true },
     }),
     db.ebayListing.findMany({
       where:  { ebayListingId: { in: ids } },
-      select: { id: true, ebayListingId: true, buyerUsername: true, soldAt: true },
+      select: { id: true, ebayListingId: true, buyerUsername: true, soldAt: true, status: true },
     }),
   ]);
   const internalByEbay = new Map(internal.map(l => [l.ebayListingId!, l]));
@@ -316,6 +316,13 @@ export async function syncSoldListings(): Promise<{ created: number; updated: nu
   for (const [itemId, info] of sold) {
     const endTimeDate = info.endTime ? new Date(info.endTime) : null;
 
+    // If SoldList returned the item, eBay says it sold. Promote our row
+    // from active / draft / ended to "sold" so the Waiting-for-Payment tab
+    // matches eBay's reality. Don't downgrade rows that are already further
+    // along the funnel (paid, shipped) — syncOrders handles those.
+    const needsPromote = (currentStatus: string) =>
+      currentStatus === "active" || currentStatus === "draft" || currentStatus === "ended";
+
     const i = internalByEbay.get(itemId);
     if (i) {
       const patch: Record<string, unknown> = {};
@@ -323,6 +330,7 @@ export async function syncSoldListings(): Promise<{ created: number; updated: nu
       if (!i.soldAt        && endTimeDate)        patch.soldAt        = endTimeDate;
       if (!i.soldPrice     && info.price > 0)     patch.soldPrice     = info.price;
       if (!i.title         && info.title)         patch.title         = info.title;
+      if (needsPromote(i.status))                 patch.status        = "sold";
       if (Object.keys(patch).length > 0) {
         await db.internalListing.update({ where: { id: i.id }, data: patch });
         updated++;
@@ -334,6 +342,7 @@ export async function syncSoldListings(): Promise<{ created: number; updated: nu
       const patch: Record<string, unknown> = {};
       if (!c.buyerUsername && info.buyerUsername) patch.buyerUsername = info.buyerUsername;
       if (!c.soldAt        && endTimeDate)        patch.soldAt        = endTimeDate;
+      if (needsPromote(c.status))                 patch.status        = "sold";
       if (Object.keys(patch).length > 0) {
         await db.ebayListing.update({ where: { id: c.id }, data: patch });
         updated++;

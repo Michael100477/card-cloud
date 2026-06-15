@@ -139,28 +139,32 @@ export async function sendSupplyAlertTestEmail(): Promise<{ ok: boolean; to: str
     "/admin/settings#shipping-supplies";
   await sendTransactionalEmail({
     to,
-    subject: "Test - Card Cloud supply alert system is live",
+    subject: "Hi - I'm Frida Day, your Card Cloud support agent",
     html: `
       <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
         <div style="background:#042C53;padding:20px 24px">
-          <p style="color:#fff;font-weight:bold;margin:0;font-size:18px">☁ The Card Cloud — Customer Service Agent</p>
+          <p style="color:#fff;font-weight:bold;margin:0;font-size:18px">☁ The Card Cloud</p>
         </div>
         <div style="padding:24px;background:#fff">
-          <h2 style="color:#042C53;margin:0 0 8px">Supply alert system is live</h2>
-          <p style="color:#334155;line-height:1.6">This is a test email to confirm the supply-tracking alert system is configured and reachable at <strong>${to}</strong>.</p>
-          <p style="color:#334155;line-height:1.6">Going forward, whenever any of these supplies drops to or below the &ldquo;Alert at&rdquo; threshold you set in <a href="${inventoryUrl}" style="color:#042C53">Settings &rarr; Rates &rarr; Shipping supplies</a>, an alert email like this will fire automatically:</p>
+          <h2 style="color:#042C53;margin:0 0 8px">Just saying hi — I'm Frida</h2>
+          <p style="color:#334155;line-height:1.6">I'm the support agent for The Card Cloud. You'll be hearing from me whenever something on the site needs your attention.</p>
+          <p style="color:#334155;line-height:1.6">For starters: the supply-tracking alert system is now configured and reachable at <strong>${to}</strong>. Whenever any of these supplies drops to or below the &ldquo;Alert at&rdquo; threshold you set in <a href="${inventoryUrl}" style="color:#042C53">Settings &rarr; Rates &rarr; Shipping supplies</a>, I'll send you a heads-up:</p>
           <ul style="color:#334155;line-height:1.8">
             <li>Envelopes</li>
             <li>Label sheets</li>
             <li>Packing slip sheets</li>
           </ul>
-          <p style="color:#334155;line-height:1.6">Each alert fires <strong>once per low-stock event</strong> — after restocking above threshold, the next time supplies drop below it will fire again. No spam.</p>
+          <p style="color:#334155;line-height:1.6">Each alert fires <strong>once per low-stock event</strong> — after you restock above threshold, the next time supplies drop below it I'll ping you again. No spam.</p>
           <p style="margin:24px 0 8px">
             <a href="${inventoryUrl}" style="background:#EF9F27;color:#412402;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Open inventory &rarr;</a>
           </p>
+          <p style="color:#334155;line-height:1.6;margin-top:32px">
+            &mdash; Frida Day<br>
+            <span style="color:#64748b;font-size:13px">Customer Support &middot; The Card Cloud</span>
+          </p>
         </div>
         <div style="background:#042C53;padding:12px 24px">
-          <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0">&copy; 2026 The Card Cloud &middot; test alert</p>
+          <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0">&copy; 2026 The Card Cloud</p>
         </div>
       </div>`,
   });

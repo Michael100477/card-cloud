@@ -81,11 +81,11 @@ export function lowSupplyAlertHtml(opts: {
   return `
   <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
     <div style="background:#042C53;padding:20px 24px">
-      <p style="color:#fff;font-weight:bold;margin:0;font-size:18px">☁ The Card Cloud — Customer Service Agent</p>
+      <p style="color:#fff;font-weight:bold;margin:0;font-size:18px">☁ The Card Cloud</p>
     </div>
     <div style="padding:24px;background:#fff">
       <h2 style="color:#b45309;margin:0 0 8px">⚠ Low on shipping supplies</h2>
-      <p style="color:#334155;line-height:1.6">The automated supply tracker just noticed one or more shipping supplies dropped to or below the threshold you set. Time to reorder before the next batch of shipments runs you dry.</p>
+      <p style="color:#334155;line-height:1.6">A quick heads-up — one or more shipping supplies just dropped to or below the threshold set in admin. Time to reorder before the next batch of shipments runs you dry.</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px">
         ${rows}
       </table>
@@ -93,9 +93,13 @@ export function lowSupplyAlertHtml(opts: {
         <a href="${opts.inventoryUrl}" style="background:#EF9F27;color:#412402;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Update inventory →</a>
       </p>
       <p style="color:#64748b;font-size:12px;line-height:1.6;margin-top:24px">This alert fires once per low-stock event. After you restock above the threshold, the system resets so it can fire again next time supplies run low.</p>
+      <p style="color:#334155;line-height:1.6;margin-top:32px">
+        — Frida Day<br>
+        <span style="color:#64748b;font-size:13px">Customer Support · The Card Cloud</span>
+      </p>
     </div>
     <div style="background:#042C53;padding:12px 24px">
-      <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0">© 2026 The Card Cloud · automated supply alert</p>
+      <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0">© 2026 The Card Cloud</p>
     </div>
   </div>`;
 }

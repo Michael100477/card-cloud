@@ -3,15 +3,19 @@
 # Run as Administrator the first time, then forget about it. To disable
 # later, open Task Scheduler and disable "Card Cloud - FB Group Discovery".
 #
-# The task runs in HEADED mode (visible browser window) — picks a time when
-# you're not actively using the computer. Adjust -StartHour below if you
-# want a different time of day.
+# The task runs in HEADED mode (visible browser window). Default time is
+# 6 PM, which matches normal FB usage hours — running at an odd time like
+# 3 AM, especially with no prior history of FB activity at that hour, can
+# look anomalous to FB's risk detection. Adjust -StartHour and -DayOfWeek
+# below if you want a different cadence.
 #
 # Usage (PowerShell as Administrator):
-#   .\scripts\social-discovery\schedule-discovery.ps1 -StartHour 3  # 3 AM weekly
+#   .\scripts\social-discovery\schedule-discovery.ps1                       # 6 PM Sunday (default)
+#   .\scripts\social-discovery\schedule-discovery.ps1 -StartHour 19         # 7 PM Sunday
+#   .\scripts\social-discovery\schedule-discovery.ps1 -DayOfWeek WEDNESDAY  # 6 PM Wednesday
 
 param(
-    [int]$StartHour = 3,
+    [int]$StartHour = 18,
     [string]$DayOfWeek = "SUNDAY"
 )
 

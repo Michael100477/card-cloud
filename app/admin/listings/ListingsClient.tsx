@@ -22,6 +22,20 @@ const FIVE_COL_GROUP = (
   </colgroup>
 );
 
+// Six-column variant used on the Internal tab (both internal_listings and
+// direct-on-eBay tables) so the Watchers column slot stays consistent across
+// them. Card / Price / Watchers / Status / Listed / Actions.
+const SIX_COL_GROUP = (
+  <colgroup>
+    <col style={{ width: "35%" }} />
+    <col style={{ width: "16%" }} />
+    <col style={{ width:  "9%" }} />
+    <col style={{ width: "11%" }} />
+    <col style={{ width: "15%" }} />
+    <col style={{ width: "14%" }} />
+  </colgroup>
+);
+
 // Compact "how long until X" string, e.g. "5d 2h left", "47m left", "ending soon", "ended".
 // Pass `now` so all rows render against the same client-ticked clock — see the
 // `now` useState in ListingsClient that bumps every 30s.
@@ -1125,11 +1139,12 @@ export function ListingsClient({
           ) : (
             <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
               <table className="w-full text-sm table-fixed">
-                {FIVE_COL_GROUP}
+                {SIX_COL_GROUP}
                 <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                   <tr>
                     <th className="text-left px-5 py-3">Card</th>
                     <th className="text-left px-5 py-3">Price</th>
+                    <th className="text-left px-3 py-3">Watchers</th>
                     <th className="text-left px-5 py-3">Status</th>
                     <th className="text-left px-5 py-3">Listed</th>
                     <th className="px-5 py-3" />
@@ -1156,11 +1171,17 @@ export function ListingsClient({
                         <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
                         {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
                         {l.soldPrice && <p className="text-green-600 font-semibold text-xs">Sold ${usd(l.soldPrice)}</p>}
-                        {l.status === "active" && (l.watchCount ?? 0) > 0 && (
-                          <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
-                        )}
                         {l.questionCount > 0 && (
                           <p className="text-amber-700 text-xs mt-0.5" title="Buyer questions in last 30 days">💬 {l.questionCount} question{l.questionCount === 1 ? "" : "s"}</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {l.status === "active" && (l.watchCount ?? 0) > 0 ? (
+                          <p className="text-navy text-sm font-medium" title="Watchers on eBay">
+                            <span className="mr-1">👁</span>{l.watchCount}
+                          </p>
+                        ) : (
+                          <span className="text-slate-300 text-sm">—</span>
                         )}
                       </td>
                       <td className="px-5 py-3">
@@ -1236,11 +1257,12 @@ export function ListingsClient({
             ) : (
               <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
                 <table className="w-full text-sm table-fixed">
-                  {FIVE_COL_GROUP}
+                  {SIX_COL_GROUP}
                   <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                     <tr>
                       <th className="text-left px-5 py-3">Card</th>
                       <th className="text-left px-5 py-3">Price</th>
+                      <th className="text-left px-3 py-3">Watchers</th>
                       <th className="text-left px-5 py-3">Status</th>
                       <th className="text-left px-5 py-3">Listed</th>
                       <th className="px-5 py-3" />
@@ -1265,11 +1287,17 @@ export function ListingsClient({
                               <p className="text-navy font-medium text-xs">${usd(l.currentPrice)}{l.bidCount > 0 && <span className="text-slate-500 font-normal"> ({l.bidCount} bid{l.bidCount === 1 ? "" : "s"})</span>}</p>
                               {l.binPrice !== null && <p className="text-slate-400 text-xs">BIN ${usd(l.binPrice)}</p>}
                               {l.quantitySold > 0 && <p className="text-green-600 text-xs">{l.quantitySold} sold</p>}
-                              {l.watchCount > 0 && (
-                                <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
-                              )}
                               {l.questionCount > 0 && (
                                 <p className="text-amber-700 text-xs mt-0.5" title="Buyer questions in last 30 days">💬 {l.questionCount} question{l.questionCount === 1 ? "" : "s"}</p>
+                              )}
+                            </td>
+                            <td className="px-3 py-3">
+                              {l.watchCount > 0 ? (
+                                <p className="text-navy text-sm font-medium" title="Watchers on eBay">
+                                  <span className="mr-1">👁</span>{l.watchCount}
+                                </p>
+                              ) : (
+                                <span className="text-slate-300 text-sm">—</span>
                               )}
                             </td>
                             <td className="px-5 py-3">
@@ -1310,7 +1338,7 @@ export function ListingsClient({
                           </tr>
                           {isExpanded && (
                             <tr key={`${l.ebayItemId}-detail`} className="bg-slate-50/80 border-t border-slate-100">
-                              <td colSpan={5} className="px-5 py-5">
+                              <td colSpan={6} className="px-5 py-5">
                                 {detailError[l.ebayItemId] ? (
                                   <p className="text-red-500 text-sm">{detailError[l.ebayItemId]}</p>
                                 ) : !detail ? (

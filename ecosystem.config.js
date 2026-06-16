@@ -22,5 +22,18 @@ module.exports = {
       max_restarts: 50,
       restart_delay: 10000,
     },
+    {
+      // Local AI Lab agent runner — polls Card Cloud every minute for
+      // pending or scheduled agent runs and dispatches them as child
+      // processes on this machine. See scripts/agent-runner/.env.example
+      // for required config. The .env file is gitignored — copy from
+      // example and fill in CARD_CLOUD_URL + AGENT_RUNNER_TOKEN first.
+      name: "card-cloud-agent-runner",
+      script: "./scripts/agent-runner/start.js",
+      watch:  false,
+      autorestart: true,
+      max_restarts: 100,
+      restart_delay: 5000,
+    },
   ],
 };

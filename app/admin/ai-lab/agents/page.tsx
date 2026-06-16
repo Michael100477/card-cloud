@@ -61,11 +61,8 @@ const AGENTS: Agent[] = [
   {
     id: "facebook-group-discovery", name: "Facebook Group Discovery",
     description: "Headed Playwright browser searches Facebook by keyword for large, active card-collecting groups and appends results to the Communities workbook. Runs LOCAL to your machine via the agent runner — uses your saved FB session.",
-    script: "social-discovery/discover-facebook.ts",
-    options: [
-      { key: "headless", label: "Headless", type: "select", options: ["false","true"], default: "false" },
-      { key: "debug",    label: "Save debug screenshots", type: "select", options: ["false","true"], default: "false" },
-    ],
+    script: "npm:discover:facebook:full",
+    options: [],
   },
 ];
 

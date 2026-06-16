@@ -762,9 +762,13 @@ export function InternalListingEditor({
         const e = await r.json().catch(() => ({}));
         throw new Error(e.error || `Add to batch failed (${r.status})`);
       }
-      // Drop into the Drafts tab so the operator sees their queued listing
-      // immediately and can either keep creating more or click List Selected.
-      router.push("/admin/listings?tab=drafts");
+      // Land on a fresh internal-listing form so the operator can keep
+      // creating without waiting. /admin/listings does an eBay sync on
+      // every page load (live prices, sold prices, question counts,
+      // order fulfillment) which can take 20+ s and would defeat the
+      // whole point of the batch flow. The queued draft lives in the
+      // Drafts tab when the operator navigates there manually.
+      router.push("/admin/internal-listings/new");
     } catch (e) {
       const msg = String(e);
       patchDraft({ addingToBatch: false, listingError: msg });

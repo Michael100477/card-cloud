@@ -365,22 +365,27 @@ export function InternalListingEditor({
     setDraft((prev) => ({ ...prev, ...patch }));
   }
 
-  async function scanSlab(photoUrl: string) {
+  async function scanSlab(photoUrls: string | string[]) {
+    const urls = Array.isArray(photoUrls) ? photoUrls : [photoUrls];
+    if (urls.length === 0) return;
     setScanning(true);
-    setScanMsg("Reading label with AI…");
+    setScanMsg(urls.length > 1 ? `Reading ${urls.length} photos with AI…` : "Reading label with AI…");
     try {
-      // For remote URLs (R2, custom domain), have the server fetch the image
+      // For remote URLs (R2, custom domain), have the server fetch the images
       // — browsers can't cross-origin fetch from R2 without CORS configured.
-      // For local /uploads/ URLs, fall through to the FormData path.
+      // For local /uploads/ URLs, fall through to the FormData path with the
+      // FIRST photo only (multipart upload is single-image; the JSON path
+      // handles the multi-photo case).
       let r: Response;
-      if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
+      const allRemote = urls.every(u => u.startsWith("http://") || u.startsWith("https://"));
+      if (allRemote) {
         r = await fetch("/api/scan", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ photoUrl }),
+          body:    JSON.stringify({ photoUrls: urls }),
         });
       } else {
-        const imgRes = await fetch(photoUrl);
+        const imgRes = await fetch(urls[0]);
         const blob   = await imgRes.blob();
         const fd     = new FormData();
         fd.append("image", blob, "slab.jpg");
@@ -890,9 +895,14 @@ export function InternalListingEditor({
                     }
                     setPhotos((p) => {
                       const updated = [...p, ...newUrls];
-                      // Always scan first photo — AI detects graded vs raw and fills fields
+                      // Scan ALL freshly-uploaded photos in one Claude call —
+                      // typically the operator drops front + back together, so
+                      // the AI gets to read the card number off the back at the
+                      // same time as it identifies the slab label / player on
+                      // the front. Only fires on the first upload session so we
+                      // don't re-scan when more photos are added later.
                       if (p.length === 0 && newUrls.length > 0) {
-                        scanSlab(newUrls[0]);
+                        scanSlab(newUrls);
                       }
                       return updated;
                     });

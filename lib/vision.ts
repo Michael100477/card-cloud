@@ -17,7 +17,9 @@ import { claudeMessage } from "@/lib/claude";
 // ~1200 tokens, identical on every scan. Stays in system so it is cached
 // automatically by claudeMessage(). The user turn carries only the image.
 
-const LABEL_PROMPT = `This is a photo of a sports or trading card — it may be a graded card inside a protective slab, or a raw (ungraded) card. It MAY also be a photo containing MULTIPLE cards (a lot).
+const LABEL_PROMPT = `You may receive ONE OR MORE photos of the SAME card — typically the front of the card or the slab label, the back of the card, or both. Treat every photo in this turn as views of the same physical card and combine what you see across them when extracting fields. Card numbers on raw cards are almost always printed on the BACK (top or bottom edge, often in small text near a copyright line, sometimes prefixed with "#" or "No."), so if a back-of-card photo is included, look there carefully for the cardNumber field.
+
+This is a photo of a sports or trading card — it may be a graded card inside a protective slab, or a raw (ungraded) card. It MAY also be a photo containing MULTIPLE DIFFERENT cards (a lot).
 
 FIRST AND MOST IMPORTANT: count the cards in the photo.
 - cardCount: integer count of distinct trading cards visible in the photo. If a single card is shown front and back (two photos of the same card), that's still cardCount=1. If you can see two or more clearly different cards (different players, different designs, or arranged as a group/stack/lot), set cardCount to that number. Cap at 50.
@@ -112,16 +114,24 @@ export interface VisionResult {
   isAutographed:   boolean;
 }
 
-export async function readLabelWithVision(imageBuffer: Buffer): Promise<VisionResult | null> {
+export async function readLabelWithVision(imageBuffers: Buffer | Buffer[]): Promise<VisionResult | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null;
 
-  try {
-    const image = await resizeForVision(imageBuffer);
+  const buffers = Array.isArray(imageBuffers) ? imageBuffers : [imageBuffers];
+  if (buffers.length === 0) return null;
 
-    // LABEL_PROMPT is in system (cached). Only the image varies per call.
+  try {
+    // Resize all photos in parallel; cap at 4 to keep the call cheap and
+    // because raw cards generally have at most front+back+a couple angles.
+    const images = await Promise.all(buffers.slice(0, 4).map(resizeForVision));
+
+    // LABEL_PROMPT is in system (cached). Only the images vary per call.
     const response = await claudeMessage({
       system:      LABEL_PROMPT,
-      userContent: [{ type: "image", source: { type: "base64", media_type: image.mediaType, data: image.data } }],
+      userContent: images.map(img => ({
+        type:   "image" as const,
+        source: { type: "base64" as const, media_type: img.mediaType, data: img.data },
+      })),
       model:       "claude-sonnet-4-6",
       maxTokens:   500,
     });

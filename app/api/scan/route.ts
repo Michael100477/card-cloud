@@ -21,40 +21,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Two input modes:
+  // Three input modes:
   //  1. multipart/form-data with `image` file (direct upload from <input>)
-  //  2. JSON body with `photoUrl` (server fetches it — used when the photo
-  //     already lives on R2 and the browser can't cross-origin fetch it)
-  let buffer: Buffer;
+  //  2. JSON body with `photoUrl: string` (single image; legacy)
+  //  3. JSON body with `photoUrls: string[]` (multiple images of the same
+  //     card — typically front + back so Claude can extract the card
+  //     number from the back where it's printed)
+  const buffers: Buffer[] = [];
   const contentType = req.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
-    const { photoUrl } = await req.json();
-    if (!photoUrl || typeof photoUrl !== "string") return NextResponse.json({ error: "photoUrl required." }, { status: 400 });
-    try {
-      const r = await fetch(photoUrl);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      buffer = Buffer.from(await r.arrayBuffer());
-    } catch (err) {
-      return NextResponse.json({ error: `Could not fetch photo: ${String(err)}` }, { status: 400 });
+    const body = await req.json();
+    const urls: string[] = Array.isArray(body.photoUrls) && body.photoUrls.length
+      ? body.photoUrls
+      : body.photoUrl ? [body.photoUrl] : [];
+    if (urls.length === 0) return NextResponse.json({ error: "photoUrl or photoUrls required." }, { status: 400 });
+
+    for (const url of urls.slice(0, 4)) {
+      if (typeof url !== "string") continue;
+      try {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const b = Buffer.from(await r.arrayBuffer());
+        if (b.length > 20 * 1024 * 1024) continue;  // skip oversized
+        buffers.push(b);
+      } catch (err) {
+        console.warn(`[scan] could not fetch ${url}:`, err);
+      }
     }
-    if (buffer.length > 20 * 1024 * 1024) return NextResponse.json({ error: "Image must be under 20 MB." }, { status: 400 });
+    if (buffers.length === 0) {
+      return NextResponse.json({ error: "Could not fetch any of the provided photos." }, { status: 400 });
+    }
   } else {
     const formData = await req.formData();
     const file     = formData.get("image") as File | null;
     if (!file)                           return NextResponse.json({ error: "No image provided." },           { status: 400 });
     if (!file.type.startsWith("image/")) return NextResponse.json({ error: "File must be an image." },       { status: 400 });
     if (file.size > 20 * 1024 * 1024)   return NextResponse.json({ error: "Image must be under 20 MB." }, { status: 400 });
-    buffer = Buffer.from(await file.arrayBuffer());
+    buffers.push(Buffer.from(await file.arrayBuffer()));
   }
 
-  // ── Path 1: Claude Vision (primary) ──────────────────────────────────────
+  // ── Path 1: Claude Vision (primary) — sees ALL provided photos at once ───
   let visionLabel: Awaited<ReturnType<typeof readLabelWithVision>> | null = null;
   try {
-    visionLabel = await readLabelWithVision(buffer);
+    visionLabel = await readLabelWithVision(buffers);
   } catch {
     // Vision failed — fall back to OCR
   }
+
+  // The OCR fallback (PaddleOCR) is single-image; use the first one for it.
+  const buffer = buffers[0];
 
   // ── Path 2: PaddleOCR (fallback if Vision fails or returns nothing) ───────
   let ocrData: { detection: ReturnType<typeof extractCertNumber>; label: ReturnType<typeof parseLabelData> } | null = null;

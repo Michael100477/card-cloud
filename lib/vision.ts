@@ -3,7 +3,7 @@
  * Replaces the Tesseract OCR pipeline — Claude reads the label directly
  * from the photo regardless of orientation, lighting, or label design.
  *
- * Cost: ~$0.005-0.01 per scan with claude-sonnet-4-6.
+ * Cost: ~$0.001-0.003 per scan with claude-haiku-4-5.
  * The LABEL_PROMPT (~1200 tokens) is cached via the shared claudeMessage()
  * helper — only the image changes per call, so cache hits are essentially
  * guaranteed after the first scan in any 5-minute window.
@@ -132,7 +132,7 @@ export async function readLabelWithVision(imageBuffers: Buffer | Buffer[]): Prom
         type:   "image" as const,
         source: { type: "base64" as const, media_type: img.mediaType, data: img.data },
       })),
-      model:       "claude-sonnet-4-6",
+      model:       "claude-haiku-4-5-20251001",
       maxTokens:   500,
     });
 

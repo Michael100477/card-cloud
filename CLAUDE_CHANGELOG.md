@@ -5,6 +5,51 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-06-15 — Local agent runner live + end-to-end Run Now wired up
+
+**Why:** Earlier today the AI Lab Agents page got Run Now and Schedule buttons, and the Facebook Group Discovery script was wired into the agent list. What was still missing was the actual dispatch — clicking Run only set a `run_pending` flag in `site_settings`; nothing was reading it. This entry closes the loop.
+
+### What's running now
+
+A small Node.js daemon at `scripts/agent-runner/` is now a managed PM2 process on the operator's local Windows machine (PM2 app name `card-cloud-agent-runner`). Once per minute it GETs `/api/ai-lab/agents/poll` on production, finds any agents with `run_pending` set or a fired cron schedule, and dispatches them as child processes. It tails stdout + stderr into a log buffer and POSTs the final status to `/api/ai-lab/agents/result` so the UI can show last-run info.
+
+The dispatcher understands four script-field conventions on `AGENTS[].script`:
+
+- `npm:<name>` → `npm run <name>`
+- `<path>.ts` → `npx tsx scripts/<path>`
+- `<path>.ps1` → `powershell -ExecutionPolicy Bypass -File scripts/<path>`
+- `<path>.py` → `python scripts/<path>`
+
+Agent options are translated into CLI flags (`true` → `--key`, value → `--key=value`, `false`/empty omitted) so a single dispatcher handles every agent script we currently have.
+
+### Endpoints added
+
+- `GET /api/ai-lab/agents/poll` — Bearer-token-authenticated. Reads all `agent_*` settings, computes the due list using `cron-parser` for schedule fire-time detection, atomically clears `run_pending` flags so the runner can't double-execute.
+- `POST /api/ai-lab/agents/result` — Bearer-token-authenticated. Stores `last_run_at`, `last_status`, and a 50KB-capped `last_log` per agent.
+
+### Shared secret
+
+`site_credentials.agent_runner_token` on Railway holds the shared secret. The runner's `scripts/agent-runner/.env` mirrors it (gitignored). Anyone with this token can dispatch runs — treat it like a service account.
+
+### PM2 wiring
+
+- `scripts/agent-runner/start.js` is a small JS launcher that spawns `npx tsx main.ts` with `shell: true`. Required because PM2 can't directly exec `npx`, and Node 24+ on Windows refuses to spawn `.cmd` shims without a shell. Took a couple iterations to land on this — leaving the note for future-me.
+- `ecosystem.config.js` adds the `card-cloud-agent-runner` entry alongside `card-cloud-app` and `card-cloud-keepalive`. `pm2 save` persists across reboots.
+
+### Smoke test
+
+After Railway finished deploying commit `8e06247`, the runner restarted and went silent — the correct signal that polls are succeeding with `{"due": []}`. Manual curl with the token returned 200 + an empty due list. Next step is for the operator to click Run Now on the Facebook Group Discovery agent in the admin UI and watch the runner log a dispatch.
+
+### Files touched
+
+- `scripts/agent-runner/main.ts`, `start.js`, `.env.example`, `.gitignore` (new)
+- `app/api/ai-lab/agents/poll/route.ts`, `result/route.ts` (new)
+- `ecosystem.config.js` (added agent-runner entry)
+- `app/admin/ai-lab/agents/page.tsx` (FB Discovery script changed to `npm:discover:facebook:full`)
+- `package.json` (added `cron-parser` dep)
+
+---
+
 ## 2026-06-15 — AI Lab documentation pass + Facebook Group Discovery agent groundwork
 
 **Why:** The AI Lab is the platform's nerve center for everything LLM-driven (vision, agents, email, messages, training), and it's matured to seven distinct sub-areas without a unified description anywhere. Operator asked for a documentation pass. Plus, ground-laying for the Facebook Group Discovery agent — the first agent that needs to run LOCAL to the operator's machine (Playwright + saved FB session), which forces an architecture decision about how scheduled local runs are dispatched from a cloud-hosted admin UI.

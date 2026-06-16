@@ -150,8 +150,9 @@ export function ListingsClient({
   const params = useSearchParams();
   const router = useRouter();
 
-  const [tab, setTab] = useState<"consignment" | "internal" | "scheduled" | "waiting" | "paid" | "shipped" | "ended" | "payout">(
-    params.get("tab") === "internal"   ? "internal"
+  const [tab, setTab] = useState<"drafts" | "consignment" | "internal" | "scheduled" | "waiting" | "paid" | "shipped" | "ended" | "payout">(
+    params.get("tab") === "drafts"      ? "drafts"
+    : params.get("tab") === "internal"   ? "internal"
     : params.get("tab") === "scheduled" ? "scheduled"
     : params.get("tab") === "waiting"   ? "waiting"
     : params.get("tab") === "paid"      ? "paid"
@@ -160,6 +161,17 @@ export function ListingsClient({
     : params.get("tab") === "payout"    ? "payout"
     : "consignment"
   );
+
+  // Multi-select on the Drafts tab — checkbox state, keyed by `${kind}:${id}`
+  const [selectedDrafts, setSelectedDrafts] = useState<Set<string>>(new Set());
+  const toggleSelected = (kind: "consignment" | "internal", id: string) => {
+    const key = `${kind}:${id}`;
+    setSelectedDrafts(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
   // Global search — when non-empty, overrides the tab view and shows
   // every listing that matches across both consignment + internal sets.
   const [search, setSearch] = useState("");
@@ -360,6 +372,68 @@ export function ListingsClient({
     setBatchRunning(false);
   }
 
+  async function listSelected() {
+    // Drafts-tab fast path: take the currently-selected rows, skip the
+    // intermediate "pending" state, and fire /api/admin/ebay/list-batch
+    // directly. Failures stay on the row's status (draft / pending) with
+    // the error label so they can be fixed and retried.
+    const refs: { kind: "consignment" | "internal"; id: string; title: string }[] = [];
+    for (const key of selectedDrafts) {
+      const [kind, id] = key.split(":") as ["consignment" | "internal", string];
+      const row = kind === "internal"
+        ? internal.find(l => l.id === id)
+        : listings.find(l => l.id === id);
+      if (row) refs.push({ kind, id, title: row.title });
+    }
+    if (refs.length === 0) return;
+    if (!confirm(`List ${refs.length} selected listing${refs.length !== 1 ? "s" : ""} on eBay now?`)) return;
+
+    const initial: BatchProgressItem[] = refs.map(r => ({
+      kind: r.kind, listingDbId: r.id, title: r.title, state: "queued",
+    }));
+    setBatchProgress(initial);
+    setBatchRunning(true);
+    setBatchProgress(initial.map(p => ({ ...p, state: "publishing" as const })));
+
+    try {
+      const r = await fetch("/api/admin/ebay/list-batch", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ refs: refs.map(r => ({ kind: r.kind, id: r.id })) }),
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok || !d?.results) {
+        setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: d?.error ?? `HTTP ${r.status}` })));
+      } else {
+        setBatchProgress(initial.map(p => {
+          const res = d.results.find((x: { listingDbId: string; kind: string; ok: boolean; url?: string; error?: string }) =>
+            x.listingDbId === p.listingDbId && x.kind === p.kind);
+          if (!res) return { ...p, state: "failed", error: "No result returned" };
+          return res.ok
+            ? { ...p, state: "success", url: res.url }
+            : { ...p, state: "failed",  error: res.error };
+        }));
+        const consignResults  = d.results.filter((x: { kind: string }) => x.kind === "consignment");
+        const internalResults = d.results.filter((x: { kind: string }) => x.kind === "internal");
+        setListings(prev => prev.map(item => {
+          const res = consignResults.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
+          if (!res) return item;
+          return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
+        }));
+        setInternal(prev => prev.map(item => {
+          const res = internalResults.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
+          if (!res) return item;
+          return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
+        }));
+        setSelectedDrafts(new Set());
+        router.refresh();
+      }
+    } catch (e) {
+      setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: String(e) })));
+    }
+    setBatchRunning(false);
+  }
+
   async function endListing(id: string) {
     if (!confirm("End this eBay listing? The item will be reset to draft so you can edit and relist it.")) return;
     setEnding(id);
@@ -438,8 +512,9 @@ export function ListingsClient({
       {/* Tabs */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
-          {(["consignment", "internal", "scheduled", "waiting", "paid", "shipped", "ended", "payout"] as const).map(t => {
-            const label = t === "consignment" ? "Consignment"
+          {(["drafts", "consignment", "internal", "scheduled", "waiting", "paid", "shipped", "ended", "payout"] as const).map(t => {
+            const label = t === "drafts"      ? "Drafts"
+                        : t === "consignment" ? "Consignment"
                         : t === "internal"    ? "Internal"
                         : t === "scheduled"   ? "Scheduled"
                         : t === "waiting"     ? "Waiting for payment"
@@ -447,13 +522,15 @@ export function ListingsClient({
                         : t === "shipped"     ? "Shipped"
                         : t === "ended"       ? "Ended"
                         : "Payout";
+            const draftCount     = [...listings, ...internal].filter(l => l.status === "draft" || l.status === "pending").length;
             const scheduledCount = [...listings, ...internal].filter(l => l.status === "scheduled").length;
             const waitingCount   = [...listings, ...internal].filter(l => l.status === "sold").length;
             const paidCount      = [...listings, ...internal].filter(l => l.status === "paid").length;
             const shippedCount   = [...listings, ...internal].filter(l => l.status === "shipped").length;
             const endedCount     = [...listings, ...internal].filter(l => l.status === "ended").length;
             const payoutCount    = [...listings, ...internal].filter(l => l.status === "shipped" && l.soldPrice != null).length;
-            const count = t === "scheduled" ? scheduledCount
+            const count = t === "drafts"    ? draftCount
+                        : t === "scheduled" ? scheduledCount
                         : t === "waiting"   ? waitingCount
                         : t === "paid"      ? paidCount
                         : t === "shipped"   ? shippedCount
@@ -609,11 +686,12 @@ export function ListingsClient({
         );
       })()}
 
-      {/* Consignment tab */}
-      {!search.trim() && tab === "consignment" && (
-        listings.length === 0 ? (
+      {/* Consignment tab — drafts and pending live in the Drafts tab now. */}
+      {!search.trim() && tab === "consignment" && (() => {
+        const consignmentLive = listings.filter(l => l.status !== "draft" && l.status !== "pending");
+        return consignmentLive.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
-            <p className="text-slate-400 text-sm">No consignment listings yet. Open a received consignment order and generate a listing on any item.</p>
+            <p className="text-slate-400 text-sm">No live consignment listings. Drafts are in the Drafts tab; once published they appear here.</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
@@ -629,7 +707,7 @@ export function ListingsClient({
                 </tr>
               </thead>
               <tbody>
-                {listings.map((l, i) => (
+                {consignmentLive.map((l, i) => (
                   <tr key={l.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                     <td className="px-5 py-3">
                       <p className="text-navy font-medium break-words">{l.title || <span className="italic">Draft</span>}</p>
@@ -713,8 +791,138 @@ export function ListingsClient({
               </tbody>
             </table>
           </div>
-        )
-      )}
+        );
+      })()}
+
+      {/* Drafts tab — every draft + pending listing from BOTH consignment
+          and internal in one place. Multi-select with checkboxes; "List
+          Selected" fires /api/admin/ebay/list-batch directly so the picked
+          listings publish in parallel (up to 5 in-flight) without an
+          intermediate pending stage. The single-row "Add to batch" flow
+          (per-row button + banner + "List All Pending") still works for
+          curated multi-session staging. */}
+      {!search.trim() && tab === "drafts" && (() => {
+        const draftsConsign = listings.filter(l => l.status === "draft" || l.status === "pending")
+                                      .map(l => ({ ...l, kind: "consignment" as const }));
+        const draftsInternal = internal.filter(l => l.status === "draft" || l.status === "pending")
+                                       .map(l => ({ ...l, kind: "internal" as const }));
+        const rows = [...draftsConsign, ...draftsInternal];
+
+        if (rows.length === 0) {
+          return (
+            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+              <p className="text-navy font-semibold mb-2">No drafts</p>
+              <p className="text-slate-400 text-sm mb-4">Generate a listing on a consignment item, or create an internal listing to start one.</p>
+              <Link href="/admin/internal-listings/new"
+                className="inline-block bg-brand text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-600 transition-colors">
+                + New internal listing
+              </Link>
+            </div>
+          );
+        }
+
+        const allKeys     = rows.map(l => `${l.kind}:${l.id}`);
+        const allSelected = allKeys.length > 0 && allKeys.every(k => selectedDrafts.has(k));
+        const selectedCount = allKeys.filter(k => selectedDrafts.has(k)).length;
+
+        const toggleAll = () => {
+          if (allSelected) setSelectedDrafts(new Set());
+          else             setSelectedDrafts(new Set(allKeys));
+        };
+
+        return (
+          <>
+            {selectedCount > 0 && (
+              <div className="bg-navy text-white rounded-2xl px-5 py-3 mb-4 flex items-center justify-between gap-4 sticky top-2 z-10 shadow-lg">
+                <p className="text-sm font-medium">
+                  {selectedCount} selected
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setSelectedDrafts(new Set())} disabled={batchRunning}
+                    className="text-xs text-slate-300 hover:text-white transition-colors disabled:opacity-50">
+                    Clear
+                  </button>
+                  <button onClick={listSelected} disabled={batchRunning}
+                    className="bg-[#e43137] text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-[#c0282d] disabled:opacity-50 transition-colors whitespace-nowrap">
+                    {batchRunning ? "Publishing…" : `List Selected (${selectedCount})`}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
+                  <tr>
+                    <th className="px-5 py-3 w-8">
+                      <input type="checkbox" checked={allSelected} onChange={toggleAll}
+                        className="cursor-pointer" aria-label="Select all drafts" />
+                    </th>
+                    <th className="text-left px-5 py-3">Card</th>
+                    <th className="text-left px-5 py-3">Source</th>
+                    <th className="text-left px-5 py-3">Price</th>
+                    <th className="text-left px-5 py-3">Status</th>
+                    <th className="px-5 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((l, i) => {
+                    const key = `${l.kind}:${l.id}`;
+                    const checked = selectedDrafts.has(key);
+                    return (
+                      <tr key={key} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="px-5 py-3">
+                          <input type="checkbox" checked={checked}
+                            onChange={() => toggleSelected(l.kind, l.id)}
+                            disabled={batchRunning}
+                            className="cursor-pointer" />
+                        </td>
+                        <td className="px-5 py-3">
+                          <p className="text-navy font-medium break-words">{l.title || <span className="italic">Untitled draft</span>}</p>
+                          <p className="text-slate-500 text-xs mt-0.5">
+                            {l.player}{l.year ? ` · ${l.year}` : ""}{l.set ? ` · ${l.set}` : ""}
+                            {l.graded && l.gradeCompany && l.grade ? ` · ${l.gradeCompany} ${l.grade}` : ""}
+                          </p>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${l.kind === "internal" ? "bg-blue-50 text-blue-700" : "bg-violet-50 text-violet-700"}`}>
+                            {l.kind === "internal" ? "Internal" : "Consignment"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-slate-600 text-sm">
+                          ${usd(Number(l.startPrice))}
+                          {l.buyItNowPrice ? <p className="text-slate-400 text-xs">BIN ${usd(Number(l.buyItNowPrice))}</p> : null}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[l.status] ?? "bg-slate-100 text-slate-500"}`}>{l.status}</span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <Link
+                              href={l.kind === "internal"
+                                ? `/admin/internal-listings/${l.id}`
+                                : `/admin/consignments/${(l as Listing).orderId}`}
+                              className="text-brand text-xs hover:underline font-medium">
+                              Edit listing
+                            </Link>
+                            {l.status === "pending" && (
+                              <button onClick={() => removeFromBatch(l.kind, l)} disabled={batchToggling === l.id || batchRunning}
+                                className="text-slate-500 hover:text-slate-700 text-xs transition-colors disabled:opacity-50">
+                                {batchToggling === l.id ? "Removing…" : "Remove from batch"}
+                              </button>
+                            )}
+                            {listError[l.id] && <p className="text-red-500 text-xs max-w-[200px] leading-tight">{listError[l.id].slice(0, 150)}</p>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Scheduled tab — listings whose status is "scheduled" (queued for
           eBay to flip live at scheduledTime). They auto-promote to "active"
@@ -1253,9 +1461,9 @@ export function ListingsClient({
 
       {/* Internal tab — site-created listings */}
       {!search.trim() && tab === "internal" && (() => {
-        // Show only in-flight listings here. Once a listing flips to
-        // sold / paid / shipped / ended it lives in its dedicated tab.
-        const internalActive = internal.filter(l => ["draft", "active"].includes(l.status));
+        // Drafts and pending live in the Drafts tab now. The Internal tab
+        // shows only what's live or about to be: active.
+        const internalActive = internal.filter(l => l.status === "active");
         return (
         <>
           {internalActive.length === 0 ? (

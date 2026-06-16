@@ -740,13 +740,18 @@ export function InternalListingEditor({
     }
   }
 
-  // ── addToBatch (queue for parallel publish on /admin/listings) ────────────
+  // ── addToBatch — flip the draft to "pending" on OUR side (no eBay call) ──
+  //
+  // The intent here is a Card-Cloud-side staging step. Once several drafts
+  // are in 'pending', the operator goes to /admin/listings → Drafts and
+  // publishes them in one parallel wave. This must NOT touch eBay.
   async function addToBatch() {
     if (!savedId) { alert("Save the listing first"); return; }
-    patchDraft({ listing: true, listingError: "" });
+    patchDraft({ addingToBatch: true, listingError: "" });
     setListError("");
     try {
-      // Persist any in-memory edits the same way listOnEbay does.
+      // Persist any in-memory edits first so the queued draft reflects the
+      // very latest changes (same belt-and-suspenders save listOnEbay does).
       await saveDraft();
       const r = await fetch(`/api/admin/internal-listings/${savedId}`, {
         method:  "PATCH",
@@ -757,10 +762,12 @@ export function InternalListingEditor({
         const e = await r.json().catch(() => ({}));
         throw new Error(e.error || `Add to batch failed (${r.status})`);
       }
-      router.push("/admin/listings?tab=internal");
+      // Drop into the Drafts tab so the operator sees their queued listing
+      // immediately and can either keep creating more or click List Selected.
+      router.push("/admin/listings?tab=drafts");
     } catch (e) {
       const msg = String(e);
-      patchDraft({ listing: false, listingError: msg });
+      patchDraft({ addingToBatch: false, listingError: msg });
       setListError(msg);
     }
   }

@@ -146,6 +146,10 @@ export interface ListingDraft {
   // UI state
   generating: boolean; generatingTitle: boolean; generatingDescription: boolean; open: boolean; saving: boolean; saved: boolean;
   listing: boolean; listingError: string;
+  // Add-to-batch flow — separate from `listing` so the "Uploading photos &
+  // creating listing…" text on the red List on eBay button doesn't show
+  // when the user just queued the listing as a draft on our side.
+  addingToBatch?: boolean; addedToBatch?: boolean;
   error: string; photosUsed: number;
 }
 
@@ -498,7 +502,7 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
     const savedId = draft?.savedId || order.items.find(i => i.id === itemId)?.listing?.id;
     if (!savedId) { patchDraft(itemId, { listingError: "Save the listing first before adding to batch." }); return; }
 
-    patchDraft(itemId, { listing: true, listingError: "" });
+    patchDraft(itemId, { addingToBatch: true, listingError: "" });
     try {
       const r = await fetch(`/api/admin/listings/${savedId}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -514,9 +518,9 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
           ...i, listing: i.listing ? { ...i.listing, status: "pending" } : i.listing
         } : i),
       }));
-      patchDraft(itemId, { listing: false });
+      patchDraft(itemId, { addingToBatch: false, addedToBatch: true });
     } catch (e) {
-      patchDraft(itemId, { listing: false, listingError: String(e) });
+      patchDraft(itemId, { addingToBatch: false, listingError: String(e) });
     }
   }
 
@@ -2100,9 +2104,13 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
         </button>
       )}
       {(draft.saved || draft.savedId) && !onReviseOnEbay && onAddToBatch && !draft.url && (
-        <button onClick={onAddToBatch} disabled={draft.listing}
-          className="w-full flex items-center justify-center gap-2 bg-white border border-amber-300 text-amber-700 font-bold py-2.5 rounded-xl text-sm hover:bg-amber-50 transition-colors disabled:opacity-50">
-          + Add to batch
+        <button onClick={onAddToBatch} disabled={draft.listing || draft.addingToBatch}
+          className={`w-full flex items-center justify-center gap-2 font-bold py-2.5 rounded-xl text-sm transition-colors disabled:opacity-60 ${
+            draft.addedToBatch
+              ? "bg-amber-50 border border-amber-200 text-amber-800"
+              : "bg-white border border-amber-300 text-amber-700 hover:bg-amber-50"
+          }`}>
+          {draft.addingToBatch ? "Adding to batch…" : draft.addedToBatch ? "✓ Added to batch — queue in /admin/listings → Drafts" : "+ Add to batch"}
         </button>
       )}
       {onReviseOnEbay && (

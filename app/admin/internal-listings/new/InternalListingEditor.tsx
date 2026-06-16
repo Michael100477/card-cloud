@@ -9,6 +9,7 @@ import {
 } from "@/app/admin/consignments/[id]/ConsignmentOrderAdmin";
 import type { EbayListingDefaults } from "@/lib/ebay-listing-defaults-shared";
 import { canonicalizeLeague, canonicalizeSport } from "@/lib/sports-data";
+import { autoDimsForBINChange } from "@/lib/listing-dims";
 
 // Used only when eBay's live category API is unavailable. Once the API responds,
 // the live list (full breadcrumbs, all leaf categories under Sports Mem, Cards & Fan Shop)
@@ -551,10 +552,18 @@ export function InternalListingEditor({
       const gradeCompanyEbay = graded
         ? (GRADER_TO_EBAY[gradeCompany] ?? gradeCompany ?? "")
         : "";
+      const generatedBIN = d1.suggestedBuyItNow ? String(d1.suggestedBuyItNow) : "";
+      const dimUpdate = autoDimsForBINChange(
+        parseFloat(generatedBIN) || 0,
+        parseFloat(draft.dimLength) || 11,
+        parseFloat(draft.dimWidth)  || 6,
+        parseFloat(draft.dimHeight) || 1,
+      );
       patchDraft({
         title:         d1.title ?? "",
         startPrice:    d1.suggestedStartPrice ? String(d1.suggestedStartPrice) : "",
-        buyItNowPrice: d1.suggestedBuyItNow  ? String(d1.suggestedBuyItNow)   : "",
+        buyItNowPrice: generatedBIN,
+        ...(dimUpdate ? { dimLength: String(dimUpdate.dimLength), dimWidth: String(dimUpdate.dimWidth), dimHeight: String(dimUpdate.dimHeight) } : {}),
         // Sync card-detail state into the draft so ListingForm widgets are pre-filled
         playerOverride:       player,
         yearOverride:         year,

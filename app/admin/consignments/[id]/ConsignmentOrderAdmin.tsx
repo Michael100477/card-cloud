@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { EbayListingDefaults } from "@/lib/ebay-listing-defaults-shared";
 import { EBAY_LD_FALLBACKS } from "@/lib/ebay-listing-defaults-shared";
+import { autoDimsForBINChange } from "@/lib/listing-dims";
 import { LEAGUES, SPORTS, SPORT_LIST } from "@/lib/sports-data";
 
 // Fallback categories used while/if the eBay API is unavailable
@@ -636,13 +637,22 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
         if (d.error) throw new Error(d.error);
         const isBIN = item.listingType === "buyitnow";
         generatedTitle = d.title ?? "";
+        const generatedBIN = isBIN
+          ? (item.desiredPrice != null ? String(item.desiredPrice) : (d.suggestedBuyItNow != null ? String(d.suggestedBuyItNow) : ""))
+          : (d.suggestedBuyItNow != null ? String(d.suggestedBuyItNow) : "");
+        const currentDraft = drafts[item.id];
+        const dimUpdate = autoDimsForBINChange(
+          parseFloat(generatedBIN) || 0,
+          parseFloat(currentDraft?.dimLength ?? "11") || 0,
+          parseFloat(currentDraft?.dimWidth  ?? "6")  || 0,
+          parseFloat(currentDraft?.dimHeight ?? "1")  || 0,
+        );
         patchDraft(item.id, {
           generatingTitle: false,
           title:           generatedTitle,
           startPrice:      isBIN ? "" : (item.desiredPrice != null ? String(item.desiredPrice) : (d.suggestedStartPrice != null ? String(d.suggestedStartPrice) : "")),
-          buyItNowPrice:   isBIN
-            ? (item.desiredPrice != null ? String(item.desiredPrice) : (d.suggestedBuyItNow != null ? String(d.suggestedBuyItNow) : ""))
-            : (d.suggestedBuyItNow != null ? String(d.suggestedBuyItNow) : ""),
+          buyItNowPrice:   generatedBIN,
+          ...(dimUpdate ? { dimLength: String(dimUpdate.dimLength), dimWidth: String(dimUpdate.dimWidth), dimHeight: String(dimUpdate.dimHeight) } : {}),
           photosUsed: d.photosUsed ?? 0,
         });
       })
@@ -1382,7 +1392,22 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
               <div className={!isAuction ? "" : dimmed}>
                 {L(!isAuction ? "Buy It Now price *" : "Buy It Now (optional)")}
                 <div className="relative"><span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
-                  <input type="number" step="0.01" value={draft.buyItNowPrice} onChange={e => onPatch({ buyItNowPrice: e.target.value })} placeholder={isAuction ? "Optional" : "49.99"} className={si + " pl-6"} /></div>
+                  <input type="number" step="0.01" value={draft.buyItNowPrice} onChange={e => {
+                    const v = e.target.value;
+                    const update: Partial<ListingDraft> = { buyItNowPrice: v };
+                    const next = autoDimsForBINChange(
+                      parseFloat(v) || 0,
+                      parseFloat(draft.dimLength) || 0,
+                      parseFloat(draft.dimWidth)  || 0,
+                      parseFloat(draft.dimHeight) || 0,
+                    );
+                    if (next) {
+                      update.dimLength = String(next.dimLength);
+                      update.dimWidth  = String(next.dimWidth);
+                      update.dimHeight = String(next.dimHeight);
+                    }
+                    onPatch(update);
+                  }} placeholder={isAuction ? "Optional" : "49.99"} className={si + " pl-6"} /></div>
               </div>
               <div className={isAuction ? "" : dimmed}>
                 {L("Reserve price (optional)")}

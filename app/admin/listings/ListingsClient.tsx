@@ -127,14 +127,6 @@ const STATUS_STYLE: Record<string, string> = {
   ended:     "bg-red-100 text-red-500",
 };
 
-interface BatchProgressItem {
-  kind:        "consignment" | "internal";
-  listingDbId: string;
-  title:       string;
-  state:       "queued" | "publishing" | "success" | "failed";
-  url?:        string;
-  error?:      string;
-}
 
 export function ListingsClient({
   listings: initialListings,
@@ -189,9 +181,12 @@ export function ListingsClient({
   // Per-row status flip "Add to batch" / "Remove from batch"
   const [batchToggling, setBatchToggling] = useState<string | null>(null);
 
-  // Batch publish modal — null while idle, populated while running and afterward
-  const [batchProgress, setBatchProgress] = useState<BatchProgressItem[] | null>(null);
-  const [batchRunning,  setBatchRunning]  = useState(false);
+  // Fire-and-forget batch publish — server kicks off publishes in the
+  // background and returns immediately. We show a brief toast so the
+  // operator knows it started; they can navigate away freely. State of
+  // individual rows is the DB; refresh the page to see what's published.
+  const [batchToast, setBatchToast] = useState<{ count: number; at: number } | null>(null);
+  const [batchRunning,  setBatchRunning]  = useState(false);  // brief — only the request itself
 
   // Direct eBay listings (loaded when Internal tab opens)
   const [directListings, setDirectListings] = useState<DirectListing[] | null>(null);
@@ -321,115 +316,75 @@ export function ListingsClient({
   const removeFromBatch  = (kind: "consignment" | "internal", l: { id: string }) => setBatchStatus(kind, l.id, "draft");
 
   async function listAllPending() {
-    const pendingC = listings.filter(l => l.status === "pending").map(p => ({ kind: "consignment" as const, id: p.id, title: p.title }));
-    const pendingI = internal.filter(l => l.status === "pending").map(p => ({ kind: "internal"     as const, id: p.id, title: p.title }));
+    const pendingC = listings.filter(l => l.status === "pending").map(p => ({ kind: "consignment" as const, id: p.id }));
+    const pendingI = internal.filter(l => l.status === "pending").map(p => ({ kind: "internal"     as const, id: p.id }));
     const all = [...pendingC, ...pendingI];
     if (all.length === 0) return;
-    if (!confirm(`List all ${all.length} pending listing${all.length !== 1 ? "s" : ""} on eBay now?`)) return;
+    if (!confirm(`List all ${all.length} pending listing${all.length !== 1 ? "s" : ""} on eBay now? They'll publish in the background — you can navigate away.`)) return;
 
-    const initial: BatchProgressItem[] = all.map(p => ({
-      kind: p.kind, listingDbId: p.id, title: p.title, state: "queued",
-    }));
-    setBatchProgress(initial);
     setBatchRunning(true);
-    setBatchProgress(initial.map(p => ({ ...p, state: "publishing" as const })));
-
     try {
       const r = await fetch("/api/admin/ebay/list-batch", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ refs: all.map(p => ({ kind: p.kind, id: p.id })) }),
+        body:    JSON.stringify({ refs: all }),
       });
       const d = await r.json().catch(() => null);
-      if (!r.ok || !d?.results) {
-        setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: d?.error ?? `HTTP ${r.status}` })));
+      if (!r.ok || !d?.ok) {
+        alert(d?.error ?? `Failed to start batch (HTTP ${r.status})`);
       } else {
-        setBatchProgress(initial.map(p => {
-          const res = d.results.find((x: { listingDbId: string; kind: string; ok: boolean; url?: string; error?: string }) =>
-            x.listingDbId === p.listingDbId && x.kind === p.kind);
-          if (!res) return { ...p, state: "failed", error: "No result returned" };
-          return res.ok
-            ? { ...p, state: "success", url: res.url }
-            : { ...p, state: "failed",  error: res.error };
-        }));
-        const consignResults = d.results.filter((x: { kind: string }) => x.kind === "consignment");
-        const internalResults = d.results.filter((x: { kind: string }) => x.kind === "internal");
-        setListings(prev => prev.map(item => {
-          const res = consignResults.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
-          if (!res) return item;
-          return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
-        }));
-        setInternal(prev => prev.map(item => {
-          const res = internalResults.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
-          if (!res) return item;
-          return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
-        }));
-        router.refresh();
+        setBatchToast({ count: all.length, at: Date.now() });
       }
     } catch (e) {
-      setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: String(e) })));
+      alert(`Failed to start batch: ${e}`);
     }
     setBatchRunning(false);
   }
 
   async function listSelected() {
-    // Drafts-tab fast path: take the currently-selected rows, skip the
-    // intermediate "pending" state, and fire /api/admin/ebay/list-batch
-    // directly. Failures stay on the row's status (draft / pending) with
-    // the error label so they can be fixed and retried.
-    const refs: { kind: "consignment" | "internal"; id: string; title: string }[] = [];
+    // Drafts-tab fast path: take the currently-selected rows and POST them
+    // to /api/admin/ebay/list-batch. The server returns 202 immediately
+    // after kicking off the work in the background — the operator can
+    // close the tab / navigate freely. Listings flip from pending → active
+    // (or stay pending + lastError if a publish fails) as each finishes,
+    // visible on the next page load.
+    const refs: { kind: "consignment" | "internal"; id: string }[] = [];
     for (const key of selectedDrafts) {
       const [kind, id] = key.split(":") as ["consignment" | "internal", string];
-      const row = kind === "internal"
-        ? internal.find(l => l.id === id)
-        : listings.find(l => l.id === id);
-      if (row) refs.push({ kind, id, title: row.title });
+      refs.push({ kind, id });
     }
     if (refs.length === 0) return;
-    if (!confirm(`List ${refs.length} selected listing${refs.length !== 1 ? "s" : ""} on eBay now?`)) return;
+    if (!confirm(`List ${refs.length} selected listing${refs.length !== 1 ? "s" : ""} on eBay now? They'll publish in the background — you can navigate away.`)) return;
 
-    const initial: BatchProgressItem[] = refs.map(r => ({
-      kind: r.kind, listingDbId: r.id, title: r.title, state: "queued",
-    }));
-    setBatchProgress(initial);
     setBatchRunning(true);
-    setBatchProgress(initial.map(p => ({ ...p, state: "publishing" as const })));
-
     try {
       const r = await fetch("/api/admin/ebay/list-batch", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ refs: refs.map(r => ({ kind: r.kind, id: r.id })) }),
+        body:    JSON.stringify({ refs }),
       });
       const d = await r.json().catch(() => null);
-      if (!r.ok || !d?.results) {
-        setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: d?.error ?? `HTTP ${r.status}` })));
+      if (!r.ok || !d?.ok) {
+        alert(d?.error ?? `Failed to start batch (HTTP ${r.status})`);
       } else {
-        setBatchProgress(initial.map(p => {
-          const res = d.results.find((x: { listingDbId: string; kind: string; ok: boolean; url?: string; error?: string }) =>
-            x.listingDbId === p.listingDbId && x.kind === p.kind);
-          if (!res) return { ...p, state: "failed", error: "No result returned" };
-          return res.ok
-            ? { ...p, state: "success", url: res.url }
-            : { ...p, state: "failed",  error: res.error };
-        }));
-        const consignResults  = d.results.filter((x: { kind: string }) => x.kind === "consignment");
-        const internalResults = d.results.filter((x: { kind: string }) => x.kind === "internal");
-        setListings(prev => prev.map(item => {
-          const res = consignResults.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
-          if (!res) return item;
-          return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
-        }));
-        setInternal(prev => prev.map(item => {
-          const res = internalResults.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
-          if (!res) return item;
-          return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
-        }));
+        setBatchToast({ count: refs.length, at: Date.now() });
         setSelectedDrafts(new Set());
-        router.refresh();
+        // Flip the just-queued rows to "pending" if they were drafts so
+        // the operator can see what's been kicked off; pending rows stay
+        // pending until refresh.
+        setListings(prev => prev.map(item =>
+          refs.find(r => r.kind === "consignment" && r.id === item.id) && item.status === "draft"
+            ? { ...item, status: "pending" }
+            : item
+        ));
+        setInternal(prev => prev.map(item =>
+          refs.find(r => r.kind === "internal" && r.id === item.id) && item.status === "draft"
+            ? { ...item, status: "pending" }
+            : item
+        ));
       }
     } catch (e) {
-      setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: String(e) })));
+      alert(`Failed to start batch: ${e}`);
     }
     setBatchRunning(false);
   }
@@ -1752,55 +1707,25 @@ export function ListingsClient({
         cardTitle={msgTarget?.cardTitle ?? ""}
       />
 
-      {/* Batch publish progress modal — shows during the run and after */}
-      {batchProgress && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-navy">{batchRunning ? "Publishing to eBay…" : "Batch complete"}</h2>
-                <p className="text-slate-500 text-xs mt-0.5">
-                  {(() => {
-                    const ok   = batchProgress.filter(p => p.state === "success").length;
-                    const fail = batchProgress.filter(p => p.state === "failed").length;
-                    if (batchRunning) return `${batchProgress.length} listing${batchProgress.length !== 1 ? "s" : ""} in flight (up to 5 in parallel)`;
-                    return `${ok} succeeded, ${fail} failed of ${batchProgress.length} total`;
-                  })()}
-                </p>
-              </div>
-              <button onClick={() => !batchRunning && setBatchProgress(null)} disabled={batchRunning}
-                className="text-slate-400 hover:text-slate-700 text-2xl leading-none disabled:opacity-30">×</button>
-            </div>
-            <div className="overflow-y-auto flex-1 px-6 py-3">
-              {batchProgress.map(p => (
-                <div key={p.listingDbId} className="py-2 border-b border-slate-50 last:border-0 flex items-center gap-3">
-                  <span className="shrink-0 w-5 text-center">
-                    {p.state === "queued"      && <span className="text-slate-300">○</span>}
-                    {p.state === "publishing"  && <span className="text-amber-500 animate-pulse">●</span>}
-                    {p.state === "success"     && <span className="text-green-600">✓</span>}
-                    {p.state === "failed"      && <span className="text-red-500">✗</span>}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-800 truncate">{p.title}</p>
-                    {p.state === "failed" && p.error && (
-                      <p className="text-xs text-red-500 mt-0.5">{p.error.slice(0, 200)}</p>
-                    )}
-                    {p.state === "success" && p.url && (
-                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline">View on eBay →</a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {!batchRunning && (
-              <div className="px-6 py-3 border-t border-slate-100 flex justify-end">
-                <button onClick={() => setBatchProgress(null)}
-                  className="bg-slate-100 text-slate-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors">
-                  Close
-                </button>
-              </div>
-            )}
+      {/* Batch publish toast — non-blocking. Server is fire-and-forget; rows
+          flip from pending → active (or stay pending + lastError on failure)
+          in the DB as each publish finishes. Operator can navigate freely. */}
+      {batchToast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-navy text-white rounded-2xl shadow-2xl px-5 py-4 flex items-start gap-3 animate-in fade-in slide-in-from-bottom-4">
+          <span className="shrink-0 w-7 h-7 rounded-full bg-green-500/20 text-green-300 flex items-center justify-center font-bold">✓</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Publishing in the background</p>
+            <p className="text-xs text-slate-300 mt-0.5">
+              {batchToast.count} listing{batchToast.count !== 1 ? "s" : ""} queued at eBay. Each takes ~25 s; up to 5 publish in parallel.
+              Navigate freely — they'll appear in their tab as they go live, or stay <em>pending</em> with an error if eBay rejected them.
+            </p>
+            <button onClick={() => { setBatchToast(null); router.refresh(); }}
+              className="text-xs text-brand-muted hover:text-white mt-2 font-medium">
+              Refresh now ↻
+            </button>
           </div>
+          <button onClick={() => setBatchToast(null)}
+            className="shrink-0 text-slate-300 hover:text-white text-xl leading-none">×</button>
         </div>
       )}
     </div>

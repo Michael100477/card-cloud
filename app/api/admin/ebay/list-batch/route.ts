@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, AdminError } from "@/lib/admin";
 import { publishListingsBatch, type BatchListingRef } from "@/lib/ebay-publish";
+import { logger } from "@/lib/logger";
 
 const CONCURRENCY = 5;
 const MAX_BATCH   = 100;
 
-/** Publish many listings (consignment + internal) to eBay at once.
- *  Up to CONCURRENCY publish in parallel. Failures don't stop the batch;
- *  each ref gets its own result entry. */
+/** Fire-and-forget batch publish. Kicks off the work in the background,
+ *  returns 202 immediately. Each individual publishListing call writes its
+ *  result (status, url, lastError, etc.) to the DB on completion, so the
+ *  source of truth is the listing rows themselves — clients see updated
+ *  state on their next page load. Anyone who needs progress can refresh
+ *  /admin/listings; failures stay visible as 'pending' rows with the
+ *  lastError populated. */
 export async function POST(req: NextRequest) {
   try { await requireAdmin(); } catch (e) {
     return NextResponse.json({ error: (e as AdminError).message }, { status: (e as AdminError).status ?? 403 });
@@ -27,9 +32,30 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const results = await publishListingsBatch(refs, CONCURRENCY);
+  // Kick off the publishes WITHOUT awaiting. Node keeps the promise alive
+  // until it resolves; each publishListing writes its own DB row on
+  // completion. Errors are isolated per-ref inside publishListingsBatch.
+  publishListingsBatch(refs, CONCURRENCY)
+    .then(results => {
+      const okCount   = results.filter(r => r.ok).length;
+      const failCount = results.length - okCount;
+      logger.info({
+        category: "ebay", action: "ebay.batch.completed",
+        message:  `Batch publish finished — ${okCount} succeeded, ${failCount} failed of ${results.length}`,
+        data:     { okCount, failCount, total: results.length },
+      });
+    })
+    .catch(e => {
+      console.error("[list-batch] unexpected error:", e);
+      logger.error({
+        category: "ebay", action: "ebay.batch.error",
+        message:  `Batch publish crashed: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    });
 
-  const okCount   = results.filter(r => r.ok).length;
-  const failCount = results.length - okCount;
-  return NextResponse.json({ ok: true, results, okCount, failCount });
+  return NextResponse.json({
+    ok:        true,
+    started:   refs.length,
+    message:   `Started ${refs.length} listing${refs.length !== 1 ? "s" : ""}. They'll appear as 'active' in their tab as each one finishes (~25 s per listing, up to ${CONCURRENCY} in parallel).`,
+  }, { status: 202 });
 }

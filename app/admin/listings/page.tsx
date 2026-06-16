@@ -120,6 +120,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
   const serialized = listings.map(l => ({
     id:           l.id,
     title:        l.title,
+    listingType:  l.listingType ?? "auction",
     status:       l.status,
     url:          l.url,
     startPrice:   Number(l.startPrice),

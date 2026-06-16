@@ -9,6 +9,27 @@ import { trackingUrl } from "@/lib/tracking";
 // US dollar formatter — always two decimals (so $17.5 displays as $17.50).
 const usd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Price cell content for the asking-price portion of a listing row.
+ *  Display rules:
+ *  - Pure Buy-It-Now (listingType==="buyitnow"): "BIN $X" only — no start
+ *    price. The start price exists in the DB only as an eBay API artifact
+ *    for BIN listings; it's not meaningful to show it.
+ *  - Auction (listingType==="auction"): "$X start" plus, if there's a
+ *    BIN, "BIN $Y" underneath. This is the auction-with-BIN hybrid eBay
+ *    allows; both prices are real and worth showing.
+ *  Sold-price display is handled separately at each call site. */
+function priceCell(l: { startPrice: number; buyItNowPrice: number | null; listingType?: string }) {
+  if (l.listingType === "buyitnow") {
+    return <p className="text-navy font-medium text-xs">BIN ${usd(l.buyItNowPrice ?? l.startPrice)}</p>;
+  }
+  return (
+    <>
+      <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
+      {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+    </>
+  );
+}
+
 // Shared column widths for the Internal listings table and the Direct-on-
 // eBay table so the two tables line up visually across the page boundary.
 // Total = 100%; tweaks should keep them summing to 100.
@@ -63,6 +84,7 @@ function endLabel(endTime: string | null): string | null {
 
 interface Listing {
   id: string; title: string; status: string; url: string | null;
+  listingType: string;
   startPrice: number; buyItNowPrice: number | null; soldPrice: number | null;
   listedAt: string | null; orderId: string; itemId: string;
   ebayListingId: string | null;
@@ -582,8 +604,9 @@ export function ListingsClient({
                       )}
                     </td>
                     <td className="px-5 py-3">
-                      <p className="text-navy font-medium text-xs">{l.soldPrice != null ? `Sold $${usd(l.soldPrice)}` : `$${usd(l.startPrice)} start`}</p>
-                      {l.buyItNowPrice && !l.soldPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+                      {l.soldPrice != null
+                        ? <p className="text-navy font-medium text-xs">Sold ${usd(l.soldPrice)}</p>
+                        : priceCell(l)}
                     </td>
                     <td className="px-5 py-3">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[l.status] ?? "bg-slate-100 text-slate-500"}`}>{l.status}</span>
@@ -680,8 +703,7 @@ export function ListingsClient({
                           ${usd(l.currentBid)} <span className="text-slate-500 font-normal">({l.bidCount} bid{l.bidCount === 1 ? "" : "s"})</span>
                         </p>
                       )}
-                      <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
-                      {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+                      {priceCell(l)}
                       {l.soldPrice && <p className="text-green-600 font-semibold text-xs">Sold ${usd(l.soldPrice)}</p>}
                       {l.status === "active" && (l.watchCount ?? 0) > 0 && (
                         <p className="text-slate-500 text-xs mt-0.5" title="Watchers on eBay">👁 {l.watchCount} watching</p>
@@ -845,8 +867,7 @@ export function ListingsClient({
                           </span>
                         </td>
                         <td className="px-5 py-3 text-slate-600 text-sm">
-                          ${usd(Number(l.startPrice))}
-                          {l.buyItNowPrice ? <p className="text-slate-400 text-xs">BIN ${usd(Number(l.buyItNowPrice))}</p> : null}
+                          {priceCell({ startPrice: Number(l.startPrice), buyItNowPrice: l.buyItNowPrice ? Number(l.buyItNowPrice) : null, listingType: l.listingType })}
                         </td>
                         <td className="px-5 py-3">
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[l.status] ?? "bg-slate-100 text-slate-500"}`}>{l.status}</span>
@@ -923,8 +944,7 @@ export function ListingsClient({
                         )}
                       </td>
                       <td className="px-5 py-3">
-                        <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
-                        {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+                        {priceCell(l)}
                       </td>
                       <td className="px-5 py-3">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE.scheduled}`}>scheduled</span>
@@ -1275,8 +1295,7 @@ export function ListingsClient({
                         )}
                       </td>
                       <td className="px-5 py-3">
-                        <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
-                        {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+                        {priceCell(l)}
                       </td>
                       <td className="px-5 py-3">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE.ended}`}>ended</span>
@@ -1462,8 +1481,7 @@ export function ListingsClient({
                             ${usd(l.currentBid)} <span className="text-slate-500 font-normal">({l.bidCount} bid{l.bidCount === 1 ? "" : "s"})</span>
                           </p>
                         ) : null}
-                        <p className="text-navy font-medium text-xs">${usd(l.startPrice)} start</p>
-                        {l.buyItNowPrice && <p className="text-slate-400 text-xs">BIN ${usd(l.buyItNowPrice)}</p>}
+                        {priceCell(l)}
                         {l.soldPrice && <p className="text-green-600 font-semibold text-xs">Sold ${usd(l.soldPrice)}</p>}
                         {l.questionCount > 0 && (
                           <p className="text-amber-700 text-xs mt-0.5" title="Buyer questions in last 30 days">💬 {l.questionCount} question{l.questionCount === 1 ? "" : "s"}</p>

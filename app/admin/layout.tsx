@@ -20,16 +20,11 @@ const NAV = [
   { href: "/admin/ebay-defaults", label: "Listing Defaults", icon: "⚙️"  },
   { section: "System" },
   { href: "/admin/logs",          label: "Logs",            icon: "📋" },
-  { section: "AI Lab" },
-  { href: "/admin/ai-lab",          label: "AI Overview",   icon: "📊" },
-  { href: "/admin/ai-lab/messages",  label: "Messages",      icon: "💬" },
-  { href: "/admin/ai-lab/agents",   label: "Agents",        icon: "🤖" },
-  { href: "/admin/ai-lab/models",   label: "Ollama Models", icon: "💡" },
-  { href: "/admin/ai-lab/testing",    label: "Model Testing",  icon: "🧪" },
-  { href: "/admin/ai-lab/photo-fix",      label: "Photo Straightener", icon: "📷" },
-  { href: "/admin/ai-lab/photo-training", label: "Photo Training",     icon: "🎯" },
-  { href: "/admin/training",          label: "Training Data",  icon: "🧠" },
+  { href: "/admin/training",      label: "Training Data",   icon: "🧠" },
 ];
+
+// AI Lab moved to a local-only site at C:\CC-AI-Lab (port 3003, password-gated,
+// LAN-reachable). See docs/AI_LAB_OVERVIEW.md in that repo for details.
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();

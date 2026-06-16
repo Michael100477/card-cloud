@@ -1,8 +1,0 @@
-# Facebook session cookies — has authenticated state, NEVER commit
-.fb-session.json
-
-# Run output (per-day CSVs)
-results/
-
-# Debug screenshots
-debug-*.png

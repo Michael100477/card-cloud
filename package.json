@@ -22,10 +22,7 @@
     "db:studio": "npx prisma studio",
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate",
-    "discover:facebook:auth": "tsx scripts/social-discovery/auth.ts",
-    "discover:facebook": "tsx scripts/social-discovery/discover-facebook.ts",
-    "discover:facebook:append": "powershell -ExecutionPolicy Bypass -File scripts/social-discovery/append-to-workbook.ps1",
-    "discover:facebook:full": "npm run discover:facebook && npm run discover:facebook:append"
+    "_ai_lab_moved": "AI Lab agents + discovery scripts moved to C:\\CC-AI-Lab"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.94.0",

@@ -124,6 +124,13 @@ export async function PATCH(
   if ("cardCount"       in body) data.cardCount       = body.cardCount;
   if ("lotContents"     in body) data.lotContents     = body.lotContents;
 
+  // Batch publish flow toggles status between "draft" <-> "pending".
+  // (Other status changes — active, scheduled, sold — come from publish or
+  // sync routes, not user-initiated PATCH.)
+  if ("status" in body && (body.status === "draft" || body.status === "pending")) {
+    data.status = body.status;
+  }
+
   const updated = await db.internalListing.update({ where: { id }, data });
   return NextResponse.json({ id: updated.id });
 }

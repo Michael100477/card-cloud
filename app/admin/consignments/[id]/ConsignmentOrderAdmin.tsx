@@ -491,6 +491,35 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
     }
   }
 
+  // ── Add to batch (queue for parallel publish on /admin/listings) ─────────
+
+  async function addToBatch(itemId: string) {
+    const draft   = drafts[itemId];
+    const savedId = draft?.savedId || order.items.find(i => i.id === itemId)?.listing?.id;
+    if (!savedId) { patchDraft(itemId, { listingError: "Save the listing first before adding to batch." }); return; }
+
+    patchDraft(itemId, { listing: true, listingError: "" });
+    try {
+      const r = await fetch(`/api/admin/listings/${savedId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "pending" }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error ?? "Failed to queue");
+      }
+      setOrder(o => ({
+        ...o,
+        items: o.items.map(i => i.id === itemId ? {
+          ...i, listing: i.listing ? { ...i.listing, status: "pending" } : i.listing
+        } : i),
+      }));
+      patchDraft(itemId, { listing: false });
+    } catch (e) {
+      patchDraft(itemId, { listing: false, listingError: String(e) });
+    }
+  }
+
   // ── Delete draft listing ─────────────────────────────────────────────────
 
   async function deleteDraft(itemId: string, listingId: string) {
@@ -995,6 +1024,7 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
                           onSave={() => saveListing(item.id)}
                           onRedo={() => generateListing(item)}
                           onListOnEbay={() => listOnEbay(item.id)}
+                          onAddToBatch={() => addToBatch(item.id)}
                           onClose={() => patchDraft(item.id, { open: false })}
                         />
                       )}
@@ -1208,7 +1238,7 @@ const LOT_CONDITIONS = [
   { label: "Used", description: "An item that has been used previously. See the seller's listing for full details and description of any imperfections.", value: "Used" },
 ];
 
-export function ListingForm({ item, draft, inp, sectionOrder, categories, catStatus, shippingRules, shippingRulesSrc, onPatch, onSave, onRedo, onListOnEbay, onReviseOnEbay, onClose, defaultScheduledTime }: {
+export function ListingForm({ item, draft, inp, sectionOrder, categories, catStatus, shippingRules, shippingRulesSrc, onPatch, onSave, onRedo, onListOnEbay, onAddToBatch, onReviseOnEbay, onClose, defaultScheduledTime }: {
   item: Item;
   draft: ListingDraft;
   inp: string;
@@ -1221,6 +1251,7 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
   onSave: () => void;
   onRedo: () => void;
   onListOnEbay: () => void;
+  onAddToBatch?: () => void;
   onReviseOnEbay?: () => void;
   onClose: () => void;
   defaultScheduledTime?: string;
@@ -2066,6 +2097,12 @@ export function ListingForm({ item, draft, inp, sectionOrder, categories, catSta
           ) : (
             <><EbayIcon /> List on eBay</>
           )}
+        </button>
+      )}
+      {(draft.saved || draft.savedId) && !onReviseOnEbay && onAddToBatch && !draft.url && (
+        <button onClick={onAddToBatch} disabled={draft.listing}
+          className="w-full flex items-center justify-center gap-2 bg-white border border-amber-300 text-amber-700 font-bold py-2.5 rounded-xl text-sm hover:bg-amber-50 transition-colors disabled:opacity-50">
+          + Add to batch
         </button>
       )}
       {onReviseOnEbay && (

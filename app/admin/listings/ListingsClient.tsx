@@ -128,6 +128,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 interface BatchProgressItem {
+  kind:        "consignment" | "internal";
   listingDbId: string;
   title:       string;
   state:       "queued" | "publishing" | "success" | "failed";
@@ -284,70 +285,70 @@ export function ListingsClient({
     setListing(null);
   }
 
-  async function addToBatch(l: Listing) {
-    setBatchToggling(l.id);
-    setListError(prev => ({ ...prev, [l.id]: "" }));
+  async function setBatchStatus(kind: "consignment" | "internal", id: string, newStatus: "pending" | "draft") {
+    setBatchToggling(id);
+    setListError(prev => ({ ...prev, [id]: "" }));
     try {
-      const r = await fetch(`/api/admin/listings/${l.id}`, {
+      const url = kind === "internal" ? `/api/admin/internal-listings/${id}` : `/api/admin/listings/${id}`;
+      const r = await fetch(url, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ status: "pending" }),
+        body:    JSON.stringify({ status: newStatus }),
       });
-      if (r.ok) setListings(prev => prev.map(item => item.id === l.id ? { ...item, status: "pending" } : item));
-      else      setListError(prev => ({ ...prev, [l.id]: "Failed to queue" }));
-    } catch (e) { setListError(prev => ({ ...prev, [l.id]: String(e) })); }
+      if (r.ok) {
+        if (kind === "internal") setInternal(prev => prev.map(item => item.id === id ? { ...item, status: newStatus } : item));
+        else                     setListings(prev => prev.map(item => item.id === id ? { ...item, status: newStatus } : item));
+      } else {
+        setListError(prev => ({ ...prev, [id]: newStatus === "pending" ? "Failed to queue" : "Failed to remove" }));
+      }
+    } catch (e) { setListError(prev => ({ ...prev, [id]: String(e) })); }
     setBatchToggling(null);
   }
 
-  async function removeFromBatch(l: Listing) {
-    setBatchToggling(l.id);
-    setListError(prev => ({ ...prev, [l.id]: "" }));
-    try {
-      const r = await fetch(`/api/admin/listings/${l.id}`, {
-        method:  "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ status: "draft" }),
-      });
-      if (r.ok) setListings(prev => prev.map(item => item.id === l.id ? { ...item, status: "draft" } : item));
-      else      setListError(prev => ({ ...prev, [l.id]: "Failed to remove" }));
-    } catch (e) { setListError(prev => ({ ...prev, [l.id]: String(e) })); }
-    setBatchToggling(null);
-  }
+  const addToBatch       = (kind: "consignment" | "internal", l: { id: string }) => setBatchStatus(kind, l.id, "pending");
+  const removeFromBatch  = (kind: "consignment" | "internal", l: { id: string }) => setBatchStatus(kind, l.id, "draft");
 
   async function listAllPending() {
-    const pending = listings.filter(l => l.status === "pending");
-    if (pending.length === 0) return;
-    if (!confirm(`List all ${pending.length} pending listing${pending.length !== 1 ? "s" : ""} on eBay now?`)) return;
+    const pendingC = listings.filter(l => l.status === "pending").map(p => ({ kind: "consignment" as const, id: p.id, title: p.title }));
+    const pendingI = internal.filter(l => l.status === "pending").map(p => ({ kind: "internal"     as const, id: p.id, title: p.title }));
+    const all = [...pendingC, ...pendingI];
+    if (all.length === 0) return;
+    if (!confirm(`List all ${all.length} pending listing${all.length !== 1 ? "s" : ""} on eBay now?`)) return;
 
-    const initial: BatchProgressItem[] = pending.map(p => ({
-      listingDbId: p.id, title: p.title, state: "queued",
+    const initial: BatchProgressItem[] = all.map(p => ({
+      kind: p.kind, listingDbId: p.id, title: p.title, state: "queued",
     }));
     setBatchProgress(initial);
     setBatchRunning(true);
-
-    // Optimistically flip all to "publishing"
     setBatchProgress(initial.map(p => ({ ...p, state: "publishing" as const })));
 
     try {
       const r = await fetch("/api/admin/ebay/list-batch", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ listingDbIds: pending.map(p => p.id) }),
+        body:    JSON.stringify({ refs: all.map(p => ({ kind: p.kind, id: p.id })) }),
       });
       const d = await r.json().catch(() => null);
       if (!r.ok || !d?.results) {
         setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: d?.error ?? `HTTP ${r.status}` })));
       } else {
-        // Update each row's progress entry + the table data
         setBatchProgress(initial.map(p => {
-          const res = d.results.find((x: { listingDbId: string; ok: boolean; url?: string; error?: string }) => x.listingDbId === p.listingDbId);
+          const res = d.results.find((x: { listingDbId: string; kind: string; ok: boolean; url?: string; error?: string }) =>
+            x.listingDbId === p.listingDbId && x.kind === p.kind);
           if (!res) return { ...p, state: "failed", error: "No result returned" };
           return res.ok
             ? { ...p, state: "success", url: res.url }
             : { ...p, state: "failed",  error: res.error };
         }));
+        const consignResults = d.results.filter((x: { kind: string }) => x.kind === "consignment");
+        const internalResults = d.results.filter((x: { kind: string }) => x.kind === "internal");
         setListings(prev => prev.map(item => {
-          const res = d.results.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
+          const res = consignResults.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
+          if (!res) return item;
+          return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
+        }));
+        setInternal(prev => prev.map(item => {
+          const res = internalResults.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
           if (!res) return item;
           return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
         }));
@@ -581,22 +582,28 @@ export function ListingsClient({
         );
       })()}
 
-      {/* Pending-batch banner — visible across the consignment tab whenever
-          there are any listings staged for batch publish. */}
-      {!search.trim() && tab === "consignment" && (() => {
-        const pendingCount = listings.filter(l => l.status === "pending").length;
-        if (pendingCount === 0) return null;
+      {/* Pending-batch banner — visible across BOTH the consignment and
+          internal tabs whenever there are any listings staged for batch
+          publish (of either kind). Counts consignment + internal together. */}
+      {!search.trim() && (tab === "consignment" || tab === "internal") && (() => {
+        const consignmentPending = listings.filter(l => l.status === "pending").length;
+        const internalPending    = internal.filter(l => l.status === "pending").length;
+        const total = consignmentPending + internalPending;
+        if (total === 0) return null;
+        const breakdown = consignmentPending > 0 && internalPending > 0
+          ? ` (${consignmentPending} consignment, ${internalPending} internal)`
+          : "";
         return (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 mb-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 font-bold text-sm flex items-center justify-center">{pendingCount}</span>
+              <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 font-bold text-sm flex items-center justify-center">{total}</span>
               <p className="text-amber-900 text-sm font-medium">
-                {pendingCount === 1 ? "1 listing queued for eBay" : `${pendingCount} listings queued for eBay`}
+                {total === 1 ? "1 listing queued for eBay" : `${total} listings queued for eBay`}{breakdown}
               </p>
             </div>
             <button onClick={listAllPending} disabled={batchRunning}
               className="bg-[#e43137] text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-[#c0282d] disabled:opacity-50 transition-colors whitespace-nowrap">
-              {batchRunning ? "Publishing…" : `List All Pending (${pendingCount})`}
+              {batchRunning ? "Publishing…" : `List All Pending (${total})`}
             </button>
           </div>
         );
@@ -671,13 +678,13 @@ export function ListingsClient({
                           </button>
                         )}
                         {l.status === "draft" && (
-                          <button onClick={() => addToBatch(l)} disabled={batchToggling === l.id || batchRunning}
+                          <button onClick={() => addToBatch("consignment", l)} disabled={batchToggling === l.id || batchRunning}
                             className="flex items-center gap-1.5 bg-white border border-amber-300 text-amber-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-amber-50 disabled:opacity-50 transition-colors whitespace-nowrap">
                             {batchToggling === l.id ? "Adding…" : "Add to batch"}
                           </button>
                         )}
                         {l.status === "pending" && (
-                          <button onClick={() => removeFromBatch(l)} disabled={batchToggling === l.id || batchRunning}
+                          <button onClick={() => removeFromBatch("consignment", l)} disabled={batchToggling === l.id || batchRunning}
                             className="text-slate-500 hover:text-slate-700 text-xs transition-colors disabled:opacity-50">
                             {batchToggling === l.id ? "Removing…" : "Remove from batch"}
                           </button>
@@ -1334,8 +1341,21 @@ export function ListingsClient({
                       <td className="px-5 py-3">
                         <div className="flex flex-col gap-1.5 items-start">
                           <Link href={`/admin/internal-listings/${l.id}`} className="text-brand text-xs hover:underline font-medium">
-                            {l.status === "draft" ? "Edit listing" : "View / Edit listing"}
+                            {l.status === "draft" || l.status === "pending" ? "Edit listing" : "View / Edit listing"}
                           </Link>
+                          {l.status === "draft" && (
+                            <button onClick={() => addToBatch("internal", l)} disabled={batchToggling === l.id || batchRunning}
+                              className="flex items-center gap-1.5 bg-white border border-amber-300 text-amber-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-amber-50 disabled:opacity-50 transition-colors whitespace-nowrap">
+                              {batchToggling === l.id ? "Adding…" : "Add to batch"}
+                            </button>
+                          )}
+                          {l.status === "pending" && (
+                            <button onClick={() => removeFromBatch("internal", l)} disabled={batchToggling === l.id || batchRunning}
+                              className="text-slate-500 hover:text-slate-700 text-xs transition-colors disabled:opacity-50">
+                              {batchToggling === l.id ? "Removing…" : "Remove from batch"}
+                            </button>
+                          )}
+                          {listError[l.id] && <p className="text-red-500 text-xs max-w-[200px] leading-tight">{listError[l.id].slice(0, 150)}</p>}
                           {(l.status === "active" || l.status === "scheduled") && l.ebayListingId && (
                             <button onClick={() => endInternalListing(l.id)} disabled={endingInt === l.id}
                               className="text-red-400 hover:text-red-600 text-xs transition-colors disabled:opacity-50">

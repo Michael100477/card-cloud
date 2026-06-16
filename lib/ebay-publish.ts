@@ -9,6 +9,13 @@ export interface PublishResult {
   error?: string;
 }
 
+export type ListingKind = "consignment" | "internal";
+
+export interface BatchListingRef {
+  kind: ListingKind;
+  id:   string;
+}
+
 /** Push a single draft/pending EbayListing row to eBay, persist the resulting
  *  IDs/URL on success or the error on failure, and dual-list on The Exchange.
  *  Called by both POST /api/admin/ebay/list (single) and POST
@@ -173,22 +180,141 @@ export async function publishListing(listingDbId: string): Promise<PublishResult
   return { ok: true, ebayListingId: result.ebayListingId, url: result.url };
 }
 
-/** Run publishListing on many IDs at once, capped at `concurrency` in-flight.
- *  Failures don't stop the batch — every ID gets its own result entry. */
+/** Push a single InternalListing row to eBay. Internal listings live in their
+ *  own table (no consignment relation) so the publish path is independent. */
+export async function publishInternalListing(listingDbId: string): Promise<PublishResult> {
+  const listing = await db.internalListing.findUnique({ where: { id: listingDbId } });
+  if (!listing)                       return { ok: false, error: "Internal listing not found" };
+  if (listing.status === "active")    return { ok: false, error: "Already listed on eBay" };
+
+  const input: EbayListingInput = {
+    sku:            listing.id,
+    listingDbId:    listing.id,
+    title:          listing.title,
+    subtitle:       listing.subtitle,
+    description:    listing.description,
+    startPrice:     Number(listing.startPrice),
+    buyItNowPrice:  listing.buyItNowPrice ? Number(listing.buyItNowPrice) : null,
+    freeShipping:   listing.freeShipping,
+    allowOffers:    listing.allowOffers,
+    minimumOffer:   listing.minimumOffer   ? Number(listing.minimumOffer)   : null,
+    autoAcceptOffer: listing.autoAcceptOffer ? Number(listing.autoAcceptOffer) : null,
+    condition:      listing.condition,
+    cardName:       listing.cardName,
+    cardType:       listing.cardType,
+    cardSize:       listing.cardSize,
+    countryOfOrigin: listing.countryOfOrigin,
+    features:       listing.features,
+    signedBy:       listing.signedBy,
+    autographAuthentication: listing.autographAuthentication,
+    autographFormat:         listing.autographFormat,
+    photos:         listing.photos,
+    player:         listing.player,
+    year:           listing.year,
+    manufacturer:   listing.manufacturer,
+    set:            listing.set,
+    subset:         listing.subset,
+    cardNumber:     listing.cardNumber,
+    sport:          listing.sport,
+    team:           listing.team,
+    league:         listing.league,
+    season:         listing.season,
+    parallel:       listing.parallel,
+    graded:         listing.graded,
+    grade:          listing.grade,
+    gradeCompany:   listing.gradeCompany,
+    certNumber:     listing.certNumber,
+    serialNumber:   listing.serialNumber,
+    autographed:    listing.autographedEbay ?? listing.autographed,
+    listingType:    listing.listingType,
+    auctionDuration: listing.auctionDuration,
+    categoryId:     listing.categoryId,
+    material:       listing.material,
+    scheduledTime:  listing.scheduledTime?.toISOString() ?? null,
+    privateListing: listing.privateListing,
+    shippingMethod: listing.shippingMethod,
+    shippingCostType: listing.shippingCostType,
+    flatRateShipping: listing.flatRateShipping ? Number(listing.flatRateShipping) : null,
+    excludedLocations: listing.excludedLocations,
+    combinedShippingRule: listing.combinedShippingRule,
+    weightLbs:      listing.weightLbs,
+    weightOz:       Number(listing.weightOz),
+    dimLength:      Number(listing.dimLength),
+    dimWidth:       Number(listing.dimWidth),
+    dimHeight:      Number(listing.dimHeight),
+    reservePrice:   listing.reservePrice ? Number(listing.reservePrice) : null,
+    conditionType:  listing.conditionType,
+    gradeCompanyEbay: listing.gradeCompanyEbay,
+    gradeEbay:      listing.gradeEbay,
+    certNumberEbay: listing.certNumberEbay,
+    cardCondition:  listing.cardCondition,
+    autographAuthNumber: listing.autographAuthNumber,
+    vintage:        listing.vintage,
+    eventTournament: listing.eventTournament,
+    language:       listing.language,
+    originalOrLicensed: listing.originalOrLicensed,
+    californiaProp65: listing.californiaProp65,
+    cardThickness:  listing.cardThickness,
+    customized:     listing.customized,
+    insertSet:      listing.insertSet,
+    printRun:       listing.printRun,
+    customSpecifics: listing.customSpecifics as { name: string; value: string }[] | null,
+    isLot:          listing.isLot,
+    cardCount:      listing.cardCount,
+  };
+
+  const result = await createEbayListing(input);
+
+  if (!result.ok) {
+    await db.internalListing.update({
+      where: { id: listingDbId },
+      data:  { lastError: result.error ?? "Unknown eBay error" },
+    });
+    return { ok: false, error: result.error ?? "Unknown eBay error" };
+  }
+
+  const fresh = await db.internalListing.findUnique({ where: { id: listingDbId } });
+  const isScheduled = !!fresh?.scheduledTime && fresh.scheduledTime.getTime() > Date.now();
+  await db.internalListing.update({
+    where: { id: listingDbId },
+    data: {
+      ebayListingId: result.ebayListingId,
+      url:           result.url,
+      status:        isScheduled ? "scheduled" : "active",
+      listedAt:      new Date(),
+      lastError:     null,
+    },
+  });
+
+  logger.info({
+    category: "ebay", action: "ebay.internal-listing.created",
+    message: `Listed internal "${listing.title?.slice(0,60)}" on eBay — ID ${result.ebayListingId}`,
+    targetId: listingDbId, targetType: "listing",
+    data: { ebayListingId: result.ebayListingId, url: result.url },
+  });
+
+  return { ok: true, ebayListingId: result.ebayListingId, url: result.url };
+}
+
+/** Run publishListing / publishInternalListing on many IDs at once, capped
+ *  at `concurrency` in-flight. Each ref names its kind. Failures don't stop
+ *  the batch — every ref gets its own result entry. */
 export async function publishListingsBatch(
-  listingDbIds: string[],
+  refs: BatchListingRef[],
   concurrency = 5,
-): Promise<Array<{ listingDbId: string } & PublishResult>> {
-  const results: Array<{ listingDbId: string } & PublishResult> = [];
-  for (let i = 0; i < listingDbIds.length; i += concurrency) {
-    const wave = listingDbIds.slice(i, i + concurrency);
+): Promise<Array<{ kind: ListingKind; listingDbId: string } & PublishResult>> {
+  const results: Array<{ kind: ListingKind; listingDbId: string } & PublishResult> = [];
+  for (let i = 0; i < refs.length; i += concurrency) {
+    const wave = refs.slice(i, i + concurrency);
     const waveResults = await Promise.all(
-      wave.map(async (id) => {
+      wave.map(async (ref) => {
         try {
-          const r = await publishListing(id);
-          return { listingDbId: id, ...r };
+          const r = ref.kind === "internal"
+            ? await publishInternalListing(ref.id)
+            : await publishListing(ref.id);
+          return { kind: ref.kind, listingDbId: ref.id, ...r };
         } catch (e) {
-          return { listingDbId: id, ok: false, error: e instanceof Error ? e.message : String(e) };
+          return { kind: ref.kind, listingDbId: ref.id, ok: false, error: e instanceof Error ? e.message : String(e) };
         }
       }),
     );

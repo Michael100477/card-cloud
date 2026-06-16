@@ -740,6 +740,31 @@ export function InternalListingEditor({
     }
   }
 
+  // ── addToBatch (queue for parallel publish on /admin/listings) ────────────
+  async function addToBatch() {
+    if (!savedId) { alert("Save the listing first"); return; }
+    patchDraft({ listing: true, listingError: "" });
+    setListError("");
+    try {
+      // Persist any in-memory edits the same way listOnEbay does.
+      await saveDraft();
+      const r = await fetch(`/api/admin/internal-listings/${savedId}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ status: "pending" }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error || `Add to batch failed (${r.status})`);
+      }
+      router.push("/admin/listings?tab=internal");
+    } catch (e) {
+      const msg = String(e);
+      patchDraft({ listing: false, listingError: msg });
+      setListError(msg);
+    }
+  }
+
   // ── reviseOnEbay (for listings already live or scheduled on eBay) ─────────
   async function reviseOnEbay() {
     if (!savedId) {
@@ -1172,6 +1197,7 @@ export function InternalListingEditor({
             onSave={saveDraft}
             onRedo={generateListing}
             onListOnEbay={listOnEbay}
+            onAddToBatch={addToBatch}
             {...(e?.ebayListingId ? { onReviseOnEbay: reviseOnEbay } : {})}
             defaultScheduledTime={String(ebayDefaults.defaultScheduledTime ?? "22:00")}
             onClose={() => patchDraft({ open: false })}

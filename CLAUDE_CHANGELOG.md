@@ -5,6 +5,49 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-06-16 — AI Lab split off into its own local-only site at C:\CC-AI-Lab
+
+**Why:** The AI Lab had quietly grown into three loosely connected things — admin pages here, a Next.js backend at `C:\Users\mikea\card-cloud-ai\` running on port 3002, and the agent runner from yesterday — and the operator wanted it cleanly separated from the Card Cloud website. Most of what the AI Lab actually does (Ollama vision models, Playwright with a logged-in FB session, IMAP polling) needs hardware Railway can't provide, so leaving the UI in here while the real work happens elsewhere kept producing features that 500 on production.
+
+### What now lives where
+
+- `C:\CC-AI-Lab\` — Next.js 16 app on PM2 (`cc-ai-lab`), port 3003, password-gated, LAN-reachable at `http://192.168.2.23:3003/` after the firewall rule. Absorbed both the old `card-cloud-ai` backend and the admin AI Lab pages. Direct connection to the same Railway Postgres this app uses, plus a bearer-token relay at `/api/admin/[...path]` for the four pages whose data fetches still call into Card Cloud admin endpoints.
+- `C:\CC-AI-Lab\scripts\agent-runner\` — runner moved here from this repo. Now polls `localhost:3003` instead of Railway. PM2 app `cc-ai-lab-runner`.
+- `C:\CC-AI-Lab\scripts\social-discovery\`, plus the Python (`raw-card-agent.py`, `tcdb-scraper.py`, `monitor-new-sets.py`, `paddle-ocr-worker.py`, `collect-training-data.py`, `tcdb-check-availability.py`) and TS (`collect-training-images.ts`, `collect-raw-cards.ts`, `collect-backs.ts`) collection scripts.
+
+### What this commit changes in Card Cloud
+
+- Removes `app/admin/ai-lab/` entirely (8 pages + clients).
+- Removes `app/api/ai-lab/` entirely (catchall proxy to `localhost:3002` + the `agents/{run,schedule,poll,result}` endpoints I added yesterday).
+- Removes `scripts/agent-runner/`, `scripts/social-discovery/`, and the Python/TS agent scripts.
+- Drops the `card-cloud-agent-runner` entry from `ecosystem.config.js`.
+- Drops the `AI Lab` section from `app/admin/layout.tsx` nav. Training Data link relocates to the System section.
+- Drops the `discover:facebook:*` npm scripts.
+
+### Auth bridge
+
+`lib/admin.ts requireAdmin()` now accepts either path:
+1. The existing NextAuth session cookie + `isAdmin`/`ADMIN_EMAIL` check (browser flows — unchanged).
+2. `Authorization: Bearer <token>` matching `site_credentials.ai_lab_admin_token`. The local CC-AI-Lab site uses path 2 for its server-side relay to forward `/api/admin/*` calls back here. Token is a 64-char hex string generated locally; anyone with it can call admin endpoints, so it's treated like a service account and never leaves the operator's machine. This change shipped in commit `12a568a` ahead of the cleanup.
+
+### Runtime cleanup also performed
+
+- `pm2 delete card-cloud-ai`, `pm2 delete card-cloud-agent-runner`, `pm2 save`.
+- Deleted `C:\Users\mikea\card-cloud-ai\` entirely.
+- Deleted the 234 MB backup zip at `C:\Users\mikea\backups\card-cloud-ai-backup-2026-06-15.zip` per the operator's no-lingering-backups rule.
+
+### Documentation
+
+- New: `C:\CC-AI-Lab\docs\AI_LAB_OVERVIEW.md` — architecture, page-by-page reference, auth, recovery, agent roster, config files. This is the source-of-truth for the local site going forward.
+- `CardCloud_SiteOverview.docx` — the existing "The AI Lab" section is replaced with a short pointer that explains the move and links to the new doc.
+- `CardCloud_SessionNotes.docx` — new 2026-06-16 entry covering the four phases of this migration.
+
+### Rollback
+
+This commit is the entire AI Lab removal. `git revert` on this SHA brings the AI Lab pages back in Card Cloud. `card-cloud-ai` is gone (no backup), so a full revert would also require either restoring from PM2's last-known-good or rebuilding the AI backend from scratch — which is exactly why this commit waited until CC-AI-Lab was verified working end-to-end.
+
+---
+
 ## 2026-06-15 — Local agent runner live + end-to-end Run Now wired up
 
 **Why:** Earlier today the AI Lab Agents page got Run Now and Schedule buttons, and the Facebook Group Discovery script was wired into the agent list. What was still missing was the actual dispatch — clicking Run only set a `run_pending` flag in `site_settings`; nothing was reading it. This entry closes the loop.

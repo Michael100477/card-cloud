@@ -120,11 +120,20 @@ interface DirectDetail {
 
 const STATUS_STYLE: Record<string, string> = {
   draft:     "bg-slate-100 text-slate-500",
+  pending:   "bg-amber-100 text-amber-700",
   scheduled: "bg-amber-100 text-amber-700",
   active:    "bg-green-100 text-green-700",
   sold:      "bg-blue-100 text-blue-700",
   ended:     "bg-red-100 text-red-500",
 };
+
+interface BatchProgressItem {
+  listingDbId: string;
+  title:       string;
+  state:       "queued" | "publishing" | "success" | "failed";
+  url?:        string;
+  error?:      string;
+}
 
 export function ListingsClient({
   listings: initialListings,
@@ -163,6 +172,13 @@ export function ListingsClient({
   const [deletingInt, setDeletingInt] = useState<string | null>(null);
   const [endingInt,   setEndingInt]   = useState<string | null>(null);
   const [endErrInt,   setEndErrInt]   = useState<Record<string, string>>({});
+
+  // Per-row status flip "Add to batch" / "Remove from batch"
+  const [batchToggling, setBatchToggling] = useState<string | null>(null);
+
+  // Batch publish modal — null while idle, populated while running and afterward
+  const [batchProgress, setBatchProgress] = useState<BatchProgressItem[] | null>(null);
+  const [batchRunning,  setBatchRunning]  = useState(false);
 
   // Direct eBay listings (loaded when Internal tab opens)
   const [directListings, setDirectListings] = useState<DirectListing[] | null>(null);
@@ -266,6 +282,81 @@ export function ListingsClient({
       }
     } catch (e) { setListError(prev => ({ ...prev, [l.id]: String(e) })); }
     setListing(null);
+  }
+
+  async function addToBatch(l: Listing) {
+    setBatchToggling(l.id);
+    setListError(prev => ({ ...prev, [l.id]: "" }));
+    try {
+      const r = await fetch(`/api/admin/listings/${l.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ status: "pending" }),
+      });
+      if (r.ok) setListings(prev => prev.map(item => item.id === l.id ? { ...item, status: "pending" } : item));
+      else      setListError(prev => ({ ...prev, [l.id]: "Failed to queue" }));
+    } catch (e) { setListError(prev => ({ ...prev, [l.id]: String(e) })); }
+    setBatchToggling(null);
+  }
+
+  async function removeFromBatch(l: Listing) {
+    setBatchToggling(l.id);
+    setListError(prev => ({ ...prev, [l.id]: "" }));
+    try {
+      const r = await fetch(`/api/admin/listings/${l.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ status: "draft" }),
+      });
+      if (r.ok) setListings(prev => prev.map(item => item.id === l.id ? { ...item, status: "draft" } : item));
+      else      setListError(prev => ({ ...prev, [l.id]: "Failed to remove" }));
+    } catch (e) { setListError(prev => ({ ...prev, [l.id]: String(e) })); }
+    setBatchToggling(null);
+  }
+
+  async function listAllPending() {
+    const pending = listings.filter(l => l.status === "pending");
+    if (pending.length === 0) return;
+    if (!confirm(`List all ${pending.length} pending listing${pending.length !== 1 ? "s" : ""} on eBay now?`)) return;
+
+    const initial: BatchProgressItem[] = pending.map(p => ({
+      listingDbId: p.id, title: p.title, state: "queued",
+    }));
+    setBatchProgress(initial);
+    setBatchRunning(true);
+
+    // Optimistically flip all to "publishing"
+    setBatchProgress(initial.map(p => ({ ...p, state: "publishing" as const })));
+
+    try {
+      const r = await fetch("/api/admin/ebay/list-batch", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ listingDbIds: pending.map(p => p.id) }),
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok || !d?.results) {
+        setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: d?.error ?? `HTTP ${r.status}` })));
+      } else {
+        // Update each row's progress entry + the table data
+        setBatchProgress(initial.map(p => {
+          const res = d.results.find((x: { listingDbId: string; ok: boolean; url?: string; error?: string }) => x.listingDbId === p.listingDbId);
+          if (!res) return { ...p, state: "failed", error: "No result returned" };
+          return res.ok
+            ? { ...p, state: "success", url: res.url }
+            : { ...p, state: "failed",  error: res.error };
+        }));
+        setListings(prev => prev.map(item => {
+          const res = d.results.find((x: { listingDbId: string; ok: boolean; url?: string }) => x.listingDbId === item.id);
+          if (!res) return item;
+          return res.ok ? { ...item, status: "active", url: res.url ?? item.url } : item;
+        }));
+        router.refresh();
+      }
+    } catch (e) {
+      setBatchProgress(initial.map(p => ({ ...p, state: "failed" as const, error: String(e) })));
+    }
+    setBatchRunning(false);
   }
 
   async function endListing(id: string) {
@@ -490,6 +581,27 @@ export function ListingsClient({
         );
       })()}
 
+      {/* Pending-batch banner — visible across the consignment tab whenever
+          there are any listings staged for batch publish. */}
+      {!search.trim() && tab === "consignment" && (() => {
+        const pendingCount = listings.filter(l => l.status === "pending").length;
+        if (pendingCount === 0) return null;
+        return (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 mb-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 font-bold text-sm flex items-center justify-center">{pendingCount}</span>
+              <p className="text-amber-900 text-sm font-medium">
+                {pendingCount === 1 ? "1 listing queued for eBay" : `${pendingCount} listings queued for eBay`}
+              </p>
+            </div>
+            <button onClick={listAllPending} disabled={batchRunning}
+              className="bg-[#e43137] text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-[#c0282d] disabled:opacity-50 transition-colors whitespace-nowrap">
+              {batchRunning ? "Publishing…" : `List All Pending (${pendingCount})`}
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Consignment tab */}
       {!search.trim() && tab === "consignment" && (
         listings.length === 0 ? (
@@ -552,16 +664,28 @@ export function ListingsClient({
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex flex-col gap-1.5 items-start">
-                        {l.status === "draft" && (
-                          <button onClick={() => listOnEbay(l)} disabled={listing === l.id}
+                        {(l.status === "draft" || l.status === "pending") && (
+                          <button onClick={() => listOnEbay(l)} disabled={listing === l.id || batchRunning}
                             className="flex items-center gap-1.5 bg-[#e43137] text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-[#c0282d] disabled:opacity-50 transition-colors whitespace-nowrap">
-                            {listing === l.id ? "Listing…" : "List on eBay"}
+                            {listing === l.id ? "Listing…" : "List Now"}
+                          </button>
+                        )}
+                        {l.status === "draft" && (
+                          <button onClick={() => addToBatch(l)} disabled={batchToggling === l.id || batchRunning}
+                            className="flex items-center gap-1.5 bg-white border border-amber-300 text-amber-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-amber-50 disabled:opacity-50 transition-colors whitespace-nowrap">
+                            {batchToggling === l.id ? "Adding…" : "Add to batch"}
+                          </button>
+                        )}
+                        {l.status === "pending" && (
+                          <button onClick={() => removeFromBatch(l)} disabled={batchToggling === l.id || batchRunning}
+                            className="text-slate-500 hover:text-slate-700 text-xs transition-colors disabled:opacity-50">
+                            {batchToggling === l.id ? "Removing…" : "Remove from batch"}
                           </button>
                         )}
                         {listError[l.id] && <p className="text-red-500 text-xs max-w-[200px] leading-tight">{listError[l.id].slice(0, 150)}</p>}
                         {l.url && <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-brand text-xs hover:underline font-medium">View on eBay →</a>}
                         <Link href={`/admin/consignments/${l.orderId}`} className="text-slate-400 text-xs hover:text-navy transition-colors">
-                          {l.status === "draft" ? "Edit listing" : "View order"}
+                          {(l.status === "draft" || l.status === "pending") ? "Edit listing" : "View order"}
                         </Link>
                         {l.status === "active" && <Link href={`/admin/consignments/${l.orderId}`} className="text-brand text-xs hover:underline font-medium">Edit listing</Link>}
                         {l.status === "active" && (
@@ -1399,6 +1523,58 @@ export function ListingsClient({
         recipientId={msgTarget?.recipientId ?? ""}
         cardTitle={msgTarget?.cardTitle ?? ""}
       />
+
+      {/* Batch publish progress modal — shows during the run and after */}
+      {batchProgress && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-navy">{batchRunning ? "Publishing to eBay…" : "Batch complete"}</h2>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  {(() => {
+                    const ok   = batchProgress.filter(p => p.state === "success").length;
+                    const fail = batchProgress.filter(p => p.state === "failed").length;
+                    if (batchRunning) return `${batchProgress.length} listing${batchProgress.length !== 1 ? "s" : ""} in flight (up to 5 in parallel)`;
+                    return `${ok} succeeded, ${fail} failed of ${batchProgress.length} total`;
+                  })()}
+                </p>
+              </div>
+              <button onClick={() => !batchRunning && setBatchProgress(null)} disabled={batchRunning}
+                className="text-slate-400 hover:text-slate-700 text-2xl leading-none disabled:opacity-30">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-3">
+              {batchProgress.map(p => (
+                <div key={p.listingDbId} className="py-2 border-b border-slate-50 last:border-0 flex items-center gap-3">
+                  <span className="shrink-0 w-5 text-center">
+                    {p.state === "queued"      && <span className="text-slate-300">○</span>}
+                    {p.state === "publishing"  && <span className="text-amber-500 animate-pulse">●</span>}
+                    {p.state === "success"     && <span className="text-green-600">✓</span>}
+                    {p.state === "failed"      && <span className="text-red-500">✗</span>}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-800 truncate">{p.title}</p>
+                    {p.state === "failed" && p.error && (
+                      <p className="text-xs text-red-500 mt-0.5">{p.error.slice(0, 200)}</p>
+                    )}
+                    {p.state === "success" && p.url && (
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline">View on eBay →</a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!batchRunning && (
+              <div className="px-6 py-3 border-t border-slate-100 flex justify-end">
+                <button onClick={() => setBatchProgress(null)}
+                  className="bg-slate-100 text-slate-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors">
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

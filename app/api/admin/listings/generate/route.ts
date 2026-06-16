@@ -229,11 +229,11 @@ export async function POST(req: NextRequest) {
                  ? (isLotListing ? LOT_DESCRIPTION_SYSTEM : DESCRIPTION_SYSTEM)
                  : QUICK_SYSTEM,
     userContent,
-    // Quick phase: always use Haiku — tiny output, blazing fast
-    // Description phase: use Sonnet when photos are present for visual detail
-    model:     phase === "description"
-      ? (hasPhotos ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001")
-      : "claude-haiku-4-5-20251001",
+    // Haiku 4.5 across the board — both phases, with or without photos.
+    // Haiku handles label-reading + description writing well enough for the
+    // listing-generation task, and the cost difference vs Sonnet adds up
+    // fast across a heavy listing session.
+    model:     "claude-haiku-4-5-20251001",
     // Description phase needs more room: 400-600 words + emojis + section headers ≈ 1200-1800 tokens
     maxTokens: phase === "description" ? 2048 : 256,
   });

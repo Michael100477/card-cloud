@@ -512,7 +512,7 @@ export function ListingsClient({
       {/* Tabs */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
-          {(["drafts", "consignment", "internal", "scheduled", "waiting", "paid", "shipped", "ended", "payout"] as const).map(t => {
+          {(["consignment", "internal", "drafts", "scheduled", "waiting", "paid", "shipped", "ended", "payout"] as const).map(t => {
             const label = t === "drafts"      ? "Drafts"
                         : t === "consignment" ? "Consignment"
                         : t === "internal"    ? "Internal"

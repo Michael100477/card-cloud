@@ -4,25 +4,32 @@ import { getQuestionCounts } from "@/lib/ebay-question-counts";
 import { syncOrdersThrottled } from "@/lib/ebay-sync-cache";
 import { ListingsClient } from "./ListingsClient";
 
-export default async function AdminListingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; reimport?: string }> }) {
+export default async function AdminListingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; reimport?: string; fast?: string }> }) {
   const sp = await searchParams;
 
-  // Auto-promote: any listing scheduled for the past should now be "active" on eBay.
-  // eBay flips its end internally — we mirror that on every page load so the badge in the
-  // table reflects reality without a cron job.
+  // ?fast=1 skips every eBay round-trip at server-render time so the page
+  // loads in well under a second. Used right after Add to batch redirects
+  // when the operator is in a one-card-after-another listing rhythm and
+  // doesn't care about live bid counts or sold-price reconciliation in
+  // that single moment. They'll get fresh data the next time they hit the
+  // page without ?fast=1.
+  const fast = sp.fast === "1";
+
+  // Auto-promote scheduled→active + eBay order sync.
   const now = new Date();
-  await Promise.all([
-    db.internalListing.updateMany({
-      where: { status: "scheduled", scheduledTime: { lte: now }, ebayListingId: { not: null } },
-      data:  { status: "active" },
-    }),
-    db.ebayListing.updateMany({
-      where: { status: "scheduled", scheduledTime: { lte: now }, ebayListingId: { not: null } },
-      data:  { status: "active" },
-    }),
-    // Pull sold/paid/shipped status from eBay's Fulfillment API (rate-limited to 1/min)
-    syncOrdersThrottled(),
-  ]);
+  if (!fast) {
+    await Promise.all([
+      db.internalListing.updateMany({
+        where: { status: "scheduled", scheduledTime: { lte: now }, ebayListingId: { not: null } },
+        data:  { status: "active" },
+      }),
+      db.ebayListing.updateMany({
+        where: { status: "scheduled", scheduledTime: { lte: now }, ebayListingId: { not: null } },
+        data:  { status: "active" },
+      }),
+      syncOrdersThrottled(),  // Pull sold/paid/shipped from eBay Fulfillment (1/min)
+    ]);
+  }
   const [listings, internalListings, livePrices, questionCounts, settingsRows] = await Promise.all([
     db.ebayListing.findMany({
       orderBy: { createdAt: "desc" },
@@ -36,8 +43,8 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
       },
     }),
     db.internalListing.findMany({ orderBy: { createdAt: "desc" } }),
-    getLivePrices(),
-    getQuestionCounts(),
+    fast ? Promise.resolve(new Map()) : getLivePrices(),
+    fast ? Promise.resolve(new Map()) : getQuestionCounts(),
     db.siteSetting.findMany({ where: { key: { in: ["commission_with_photos", "commission_without_photos"] } } }),
   ]);
   const settingsMap = new Map(settingsRows.map(s => [s.key, s.value]));
@@ -51,7 +58,7 @@ export default async function AdminListingsPage({ searchParams }: { searchParams
   // third. Gate on whether we got a fresh successful eBay snapshot, NOT on
   // whether it returned any active items — a user with zero live auctions
   // is a normal state, and would otherwise strand any "active" rows forever.
-  if (await hasFreshEbaySnapshot()) {
+  if (!fast && await hasFreshEbaySnapshot()) {
     const liveIds    = new Set(livePrices.keys());
     const soldPrices = await getSoldPrices();
     type Row = { id: string; status: string; ebayListingId: string | null; soldPrice: unknown };

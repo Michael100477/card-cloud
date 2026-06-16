@@ -519,6 +519,9 @@ export function ConsignmentOrderAdmin({ order: initial, ebaySection, ebayDefault
         } : i),
       }));
       patchDraft(itemId, { addingToBatch: false, addedToBatch: true });
+      // Land back on the Consignment tab. ?fast=1 skips the eBay sync block
+      // so the destination renders from DB only (well under a second).
+      router.push("/admin/listings?tab=consignment&fast=1");
     } catch (e) {
       patchDraft(itemId, { addingToBatch: false, listingError: String(e) });
     }

@@ -1103,3 +1103,35 @@ model TradeRevisionCard {
   @@index([cardId])
   @@map("trade_revision_cards")
 }
+
+// ─────────────────────────────────────────
+// Intelligence Digest — daily-refreshed feed of items pulled from
+// outside sources (RSS, YouTube, Reddit, newsletter inbox, Twitter via
+// Playwright). Surfaced in CC-AI-Lab /intel, Card Cloud /admin/intel,
+// and a morning email summary. Each row is one item from one source.
+// ─────────────────────────────────────────
+model DigestItem {
+  id           String   @id @default(cuid())
+  source       String   // "rss" | "youtube" | "reddit" | "twitter" | "newsletter"
+  sourceName   String   // Display name, e.g. "Cardboard Connection", "r/sportscards", "Puck Junk"
+  title        String   @db.Text
+  url          String   @unique  // dedupes across runs
+  publishedAt  DateTime?
+  fetchedAt    DateTime @default(now())
+  summary      String?  @db.Text  // Claude-generated 1-2 sentences
+  excerpt      String?  @db.Text  // raw excerpt / description from the source
+  author       String?
+  imageUrl     String?  @db.Text
+  // Engagement signal — upvotes for Reddit, views for YouTube, etc.
+  // Kept as a flat int so cross-source sorting is trivial.
+  score        Int?
+  topics       String[]
+  read         Boolean  @default(false)
+  starred      Boolean  @default(false)
+
+  @@index([source, fetchedAt])
+  @@index([fetchedAt])
+  @@index([starred, fetchedAt])
+  @@map("digest_items")
+}
+

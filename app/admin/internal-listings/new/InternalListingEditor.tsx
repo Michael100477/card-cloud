@@ -447,7 +447,11 @@ export function InternalListingEditor({
   function buildCardData() {
     return {
       player,
-      year: parseInt(year) || null,
+      // Send the year exactly as typed (a string) so multi-year season formats
+      // like "1986-87" survive into the AI-generated title/description. Using
+      // parseInt here would collapse "1986-87" → 1986. The DB still stores a
+      // numeric year elsewhere; this payload only feeds listing generation.
+      year: year.trim() || null,
       manufacturer,
       set,
       subset,

@@ -5,6 +5,22 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-06-16 21:27 — Fix: multi-year season ("1986-87") dropped from generated listings
+
+**Symptom:** When the operator corrected an AI-identified year on an internal listing from `1986` to `1986-87` (the standard basketball/hockey season format) and clicked Generate, the generated title still showed `1986`.
+
+**Root cause:** The Year input is a free-text field (string state), but `buildCardData()` — the payload sent to `/api/admin/listings/generate` — ran the value through `parseInt(year)`. `parseInt("1986-87")` returns `1986`, so the AI never received the `-87`. The title and description were generated from the truncated number.
+
+**Fix (2 files):**
+- `app/admin/internal-listings/new/InternalListingEditor.tsx` — `buildCardData()` now sends `year: year.trim() || null` (raw string) instead of `parseInt(year) || null`. `buildCardData()` is used only for generation, so this does not affect the `Int` year column used elsewhere on save.
+- `app/api/admin/listings/generate/route.ts` — widened the `year` payload type to `number | string | null` (it is only interpolated into the prompt, never used numerically), and added a TITLE RULE instructing the model to preserve a provided two-year span like `1986-87` rather than shortening it to `1986`.
+
+**Result:** Generation now honors the operator's correction. The numeric `year` column still stores `1986`; the title/description and the eBay `season` field carry `1986-87`, which matches eBay's basketball/hockey conventions.
+
+**Verified:** `/admin/internal-listings/new` compiles and serves (HTTP 307 auth redirect, no 500) on the running dev server (port 3001).
+
+---
+
 ## 2026-06-16 — AI Lab split off into its own local-only site at C:\CC-AI-Lab
 
 **Why:** The AI Lab had quietly grown into three loosely connected things — admin pages here, a Next.js backend at `C:\Users\mikea\card-cloud-ai\` running on port 3002, and the agent runner from yesterday — and the operator wanted it cleanly separated from the Card Cloud website. Most of what the AI Lab actually does (Ollama vision models, Playwright with a logged-in FB session, IMAP polling) needs hardware Railway can't provide, so leaving the UI in here while the real work happens elsewhere kept producing features that 500 on production.

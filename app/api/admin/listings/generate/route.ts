@@ -13,6 +13,7 @@ const QUICK_SYSTEM = `You are an expert eBay trading card seller. Generate ONLY 
 
 TITLE RULES:
 - Maximum 80 characters — hard limit
+- Use the provided Year EXACTLY as given. If it is a two-year span like "1986-87" (standard for basketball/hockey sets whose season crosses two calendar years), keep both parts — do NOT shorten it to "1986".
 - Required format: "Player Name - Year Set Subset Card# - #'d Serial Auto"
   - Lead with the player name, then " - ", then card details
   - DO NOT include the manufacturer (Topps, Panini, Upper Deck, etc.) — the set name already implies it ("Bowman Chrome" already means Topps; "Prizm" already means Panini). Listing the manufacturer separately wastes valuable title characters.
@@ -136,7 +137,9 @@ export async function POST(req: NextRequest) {
 
   const { photos = [], ...card } = body as {
     photos: string[];
-    player: string; year?: number | null; manufacturer?: string | null;
+    // year is a string here ("1986-87" for basketball seasons survives intact);
+    // it is only interpolated into the prompt, never used as a number.
+    player: string; year?: number | string | null; manufacturer?: string | null;
     set?: string | null; subset?: string | null; cardNumber?: string | null; sport?: string | null;
     graded: boolean; grade?: string | null; gradeCompany?: string | null; certNumber?: string | null;
     numbered: boolean; serialNumber?: string | null;

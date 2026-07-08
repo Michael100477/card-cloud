@@ -5,6 +5,17 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-07-06 — Fix: card-cloud-app dev server popped a visible console window at startup
+
+**Symptom:** The `card-cloud-app` PM2 process opened a visible cmd.exe window in the taskbar every time it started (fresh boot via `CardCloud-Start.vbs` → `pm2 resurrect`, or a manual `pm2 restart card-cloud-app`). PM2 itself launches hidden and `windowsHide: true` was already present in the PM2 dump, so the extra window was coming from further down the process tree.
+
+**Root cause:** `scripts/start-app.js` spawned the dev server via `spawn("npm", ["run", "dev:app"], { stdio: "inherit", shell: true, windowsHide: true })`. On Windows, `shell: true` inserts a `cmd.exe` wrapper before the npm invocation, and it's that intermediate cmd.exe (not the final child) that produces the visible window. `windowsHide` applies to the *child* being spawned, not to the shell parent, so it was silently ineffective in this path. The full tree was `node → cmd → npm → cmd → next dev`.
+
+**Fix (1 file):**
+- `scripts/start-app.js` — now spawns the Next.js dev binary directly through node, bypassing the shell/npm wrapper entirely: `spawn(process.execPath, [<node_modules/next/dist/bin/next>, "dev", "-p", "3001"], { cwd: projectRoot, stdio: "inherit", windowsHide: true })`. Same behavior as before (dev mode on port 3001, output piped through PM2), but the resulting process tree is just `node → node (next)` with no cmd.exe layer, so no window appears.
+
+Confirmed the Next.js CLI docs (`node_modules/next/dist/docs/01-app/03-api-reference/06-cli/next.md`) list `next dev -p <port>` as the canonical invocation — no wrapper required, no customization in this repo that changes how `next` is invoked. Verified after restart: (a) `http://localhost:3001/` returns HTTP 200, (b) `Win32_Process` query of the PID's children shows only one node child (the next dev process), no cmd.exe. Ran `pm2 save` so the fix persists across reboots. Same `windowsHide: true` treatment was already applied to CC-AI-Lab's spawn calls back on 2026-07-02 after a similar (newsletter fetcher) window-popup incident — this closes the last remaining spawn on the Card Cloud side that was still using `shell: true`.
+
 ## 2026-06-16 21:27 — Fix: multi-year season ("1986-87") dropped from generated listings
 
 **Symptom:** When the operator corrected an AI-identified year on an internal listing from `1986` to `1986-87` (the standard basketball/hockey season format) and clicked Generate, the generated title still showed `1986`.

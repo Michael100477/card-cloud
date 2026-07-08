@@ -192,6 +192,7 @@ model EmailThread {
   status      String   @default("open")     // "open" | "resolved" | "escalated" | "draft"
   escalated   Boolean  @default(false)
   escalationReason String?
+  folder      String   @default("INBOX")    // OWA-style folder for support@ threads
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   messages    EmailMessage[]
@@ -1104,6 +1105,23 @@ model TradeRevisionCard {
   @@map("trade_revision_cards")
 }
 
+// Per-mailbox folder list (Outlook-style). Lives independently of the
+// messages so empty folders are possible. INBOX + Sent are seeded as
+// builtin (can't be deleted); user adds custom folders + moves messages
+// between them via the /communications UI.
+model MailFolder {
+  id        String   @id @default(cuid())
+  mailbox   String   // "digest" | "support" | (later: "ebay" if we ever model that)
+  name      String   // "INBOX" | "Sent" | "Saved Articles" | etc.
+  builtin   Boolean  @default(false)  // INBOX + Sent — not deletable
+  position  Int      @default(0)      // sort order in the sidebar
+  createdAt DateTime @default(now())
+
+  @@unique([mailbox, name])
+  @@index([mailbox, position])
+  @@map("mail_folders")
+}
+
 // ─────────────────────────────────────────
 // Intelligence Digest — daily-refreshed feed of items pulled from
 // outside sources (RSS, YouTube, Reddit, newsletter inbox, Twitter via
@@ -1112,16 +1130,18 @@ model TradeRevisionCard {
 // ─────────────────────────────────────────
 model DigestItem {
   id           String   @id @default(cuid())
-  source       String   // "rss" | "youtube" | "reddit" | "twitter" | "newsletter"
+  source       String   // "rss" | "youtube" | "reddit" | "twitter" | "newsletter" | "webwatch" | "facebook"
   sourceName   String   // Display name, e.g. "Cardboard Connection", "r/sportscards", "Puck Junk"
   title        String   @db.Text
   url          String   @unique  // dedupes across runs
   publishedAt  DateTime?
   fetchedAt    DateTime @default(now())
   summary      String?  @db.Text  // Claude-generated 1-2 sentences
-  excerpt      String?  @db.Text  // raw excerpt / description from the source
+  excerpt      String?  @db.Text  // Plain-text short preview (for list view)
+  bodyHtml     String?  @db.Text  // Full HTML body for detail view (newsletters mostly; sanitized at render time with DOMPurify)
   author       String?
   imageUrl     String?  @db.Text
+  folder       String   @default("INBOX")  // For source="newsletter" items: which mail folder it sits in. Other sources: ignored.
   // Engagement signal — upvotes for Reddit, views for YouTube, etc.
   // Kept as a flat int so cross-source sorting is trivial.
   score        Int?
@@ -1133,5 +1153,32 @@ model DigestItem {
   @@index([fetchedAt])
   @@index([starred, fetchedAt])
   @@map("digest_items")
+}
+
+// One row per configured source the digest pulls from. Replaces the
+// JSON config files (feeds.json, subreddits.json) so the operator can
+// add/remove sources from the AI Lab /sources UI instead of editing
+// files. Each connector reads its enabled rows on every run.
+model DigestSource {
+  id           String   @id @default(cuid())
+  kind         String   // "rss" | "reddit" | "webwatch" | "newsletter" | "youtube" | "twitter" | "facebook_page" | "tiktok" | "instagram"
+  name         String   // Display name, e.g. "Cardboard Connection", "r/sportscards"
+  identifier   String   // URL, subreddit (without /r/), channel handle, page URL, etc.
+  topic        String?  // Optional category tag — flows into DigestItem.topics
+  enabled      Boolean  @default(true)
+  config       Json?    // Kind-specific extras: { sort, timeframe } for reddit, { cadence } for webwatch, etc.
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Last-run tracking — visible in the /sources UI so the operator
+  // can see at a glance which connectors are healthy.
+  lastFetchedAt    DateTime?
+  lastNewItemCount Int       @default(0)
+  lastError        String?   @db.Text
+
+  @@unique([kind, identifier])
+  @@index([kind, enabled])
+  @@map("digest_sources")
 }
 

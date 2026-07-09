@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Allow both localhost and 127.0.0.1 as dev origins.
-  // Required when running behind PM2 — without this Next.js 16 blocks
-  // its own JS bundle from loading, preventing React from hydrating.
-  allowedDevOrigins: ["localhost", "127.0.0.1"],
+  // Allow both localhost and 127.0.0.1 as dev origins, plus the
+  // `thecardcloud` LAN host and its IP so the dev server on that box
+  // accepts cross-origin HMR + fetches from browsers on the LAN.
+  // Required when running behind PM2 or nssm — without this Next.js 16
+  // blocks its own JS bundle from loading, preventing React from
+  // hydrating.
+  allowedDevOrigins: ["localhost", "127.0.0.1", "thecardcloud", "192.168.2.107"],
 
   // Photos are served from Cloudflare R2 in production. Whitelist:
   //   - *.r2.dev — Cloudflare's auto-issued public bucket URLs

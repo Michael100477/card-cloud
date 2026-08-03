@@ -5,6 +5,26 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-08-03 13:00 — eBay OAuth: dropped base `oauth/api_scope` from user flow, Taxonomy calls now use Client Credentials
+
+**Rationale.** eBay Developer Support notified us they will remove `https://api.ebay.com/oauth/api_scope` from the Authorization Code Grant Type flow when they assign us the `sell.logistics` scope (Growth Check ticket #260612-000021, needed for eBay Standard Envelope labels — ~$1.29 for cards under 3oz vs $4+ on other carriers). The base scope stays available via the Client Credentials Grant Type. Card Cloud only needed the base scope for two Commerce Taxonomy metadata calls, so we moved those onto an app-only token and dropped the base scope from the user OAuth request list. Staged before eBay flips the switch (they said "this week") so there is no breakage window.
+
+**Changes (3 files, commit `6a94135`):**
+- `lib/ebay-auth.ts` — removed `"https://api.ebay.com/oauth/api_scope"` from the `SCOPES` array (with a comment explaining why); added `getAppAccessToken()` — mints a Client Credentials token, caches it in `SiteCredential` under `ebay_app_access_token` (+ `_prod` variant), re-mints when < 2 min remaining. Same `envKey()` prod/sandbox pattern as user tokens.
+- `app/api/admin/ebay/categories/route.ts` — swapped `getAccessToken` → `getAppAccessToken` (import + one call site).
+- `app/api/admin/ebay/graders/route.ts` — same swap.
+
+Existing seller connections are unaffected: the refresh flow deliberately does not pass scope (line 161 note), so eBay reuses whatever scopes were granted at handshake time. The only user-visible change is that a fresh reconnect will grant a narrower set of scopes going forward.
+
+**Verified on dev (thecardcloud, 2026-08-03).** Throwaway script in `scripts/_tmp/test-app-token.ts` (deleted after use): (a) first call minted a token (1948 chars, `v^1.1#i^1#p^...` prefix), (b) second call returned the same token from SiteCredential cache, (c) Taxonomy call `get_category_subtree?category_id=64482` returned HTTP 200 with 8 child categories. Also hit the two admin routes anonymously — Next.js compiled both in 41ms / 15ms and returned 401 (admin auth rejection, no TS/module errors). Prod smoke-checked after Railway deploy — both routes return 401, `/api/health` returns 200.
+
+**Grep swept the whole dev tree for other callers of `commerce/*`.** The only other match is `commerce/message/v1/...` which uses its own `commerce.message` scope (still in `SCOPES`) with the user token. No other Taxonomy callers, no other places that needed the base scope.
+
+**Next follow-ups (blocked on eBay's next reply — "this week"):**
+- When eBay confirms grant: re-add `"https://api.ebay.com/oauth/api_scope/sell.logistics"` to `SCOPES` in `lib/ebay-auth.ts` (currently documented-out at that spot).
+- Michael revokes + reconnects his eBay app on Card Cloud so the new user token includes `sell.logistics` (see [Reference: eBay third-party app access page](https://accounts.ebay.com/acctsec/security-center/third-party-app-access)).
+- Build `lib/ebay-shipping.ts` wiring `sell.logistics` shipping_quote + shipment endpoints into the Shipping page "Create Label" button so we can buy eBay Standard Envelope labels directly.
+
 ## 2026-07-09 — Card Cloud dev environment migrated from DUNGEON2025 to `thecardcloud`
 
 **Rationale.** DUNGEON2025 was doing double duty as Michael's editing seat *and* the Card Cloud dev-server host. Moving the dev environment onto a dedicated LAN host (`thecardcloud`, 192.168.2.107) — while keeping the editing seat on DUNGEON2025 — separates the two roles cleanly, gets the DB off Michael's daily-driver workstation, and consolidates services on the box that already runs the legacy Card Cloud PHP site, the HayBackup product, and the AI stack. Prod stays on Railway; nothing about the GitHub → Railway auto-deploy pipeline changed.

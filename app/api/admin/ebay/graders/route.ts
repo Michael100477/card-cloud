@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminError } from "@/lib/admin";
-import { getAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
+import { getAppAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
 import { db } from "@/lib/db";
 
 // Hardcoded fallback list — used when eBay API is unavailable or returns no values.
@@ -51,7 +51,7 @@ export async function GET() {
   }
 
   try {
-    const token = await getAccessToken();
+    const token = await getAppAccessToken();
     const env = await getCred("ebay_environment");
     const isSandbox = env === "sandbox";
     const base = isSandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";

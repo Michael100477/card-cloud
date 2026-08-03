@@ -38,7 +38,11 @@ async function getEnv() {
 // ── OAuth scopes ──────────────────────────────────────────────────────────
 
 const SCOPES = [
-  "https://api.ebay.com/oauth/api_scope",
+  // NOTE: the base "https://api.ebay.com/oauth/api_scope" is deliberately
+  // omitted here. eBay removed it from the Authorization Code Grant Type
+  // flow when sell.logistics was assigned to our app. Commerce APIs that
+  // still need the base scope (e.g. Taxonomy) use getAppAccessToken()
+  // below — Client Credentials Grant Type, which retains this scope.
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
   "https://api.ebay.com/oauth/api_scope/sell.account",
@@ -176,6 +180,61 @@ export async function getAccessToken(): Promise<string> {
   await Promise.all([
     setCred(atKey2, "eBay Access Token",     data.access_token),
     setCred(teKey2, "eBay Token Expires At", newExpiresAt),
+  ]);
+
+  return data.access_token;
+}
+
+// ── App-only access token (Client Credentials Grant) ──────────────────────
+// For Commerce APIs (Taxonomy, etc.) that only need application identity,
+// not seller identity. Kept separate from the user OAuth flow because eBay
+// removed the base "oauth/api_scope" from the Authorization Code Grant Type
+// flow when we were granted sell.logistics — that scope is still available
+// via Client Credentials Grant Type.
+//
+// Token stored in SiteCredential under the same _prod / no-suffix pattern
+// as the user tokens. No refresh token (Client Credentials just re-mints).
+
+export async function getAppAccessToken(): Promise<string> {
+  const [atKey, teKey] = await Promise.all([
+    envKey("ebay_app_access_token"),
+    envKey("ebay_app_token_expires_at"),
+  ]);
+  const [token, expiresAt] = await Promise.all([getCred(atKey), getCred(teKey)]);
+
+  // Reuse if it has more than 2 minutes left
+  if (token && expiresAt && new Date(expiresAt).getTime() > Date.now() + 120_000) {
+    return token;
+  }
+
+  const [appId, certId] = await Promise.all([
+    getCred(await envKey("ebay_app_id")),
+    getCred(await envKey("ebay_cert_id")),
+  ]);
+  if (!appId || !certId) throw new Error("Missing eBay App ID or Cert ID");
+
+  const { apiBase } = await getEnv();
+  const credentials = Buffer.from(`${appId}:${certId}`).toString("base64");
+
+  const r = await fetch(`${apiBase}/identity/v1/oauth2/token`, {
+    method:  "POST",
+    headers: {
+      Authorization:  `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      scope:      "https://api.ebay.com/oauth/api_scope",
+    }),
+  });
+
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error_description ?? "App token mint failed");
+
+  const newExpiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+  await Promise.all([
+    setCred(atKey, "eBay App Access Token",     data.access_token),
+    setCred(teKey, "eBay App Token Expires At", newExpiresAt),
   ]);
 
   return data.access_token;

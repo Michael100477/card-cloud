@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminError } from "@/lib/admin";
-import { getAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
+import { getAppAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
 import { db } from "@/lib/db";
 
 // Two top-level eBay parent categories that cover everything we care about:
@@ -26,7 +26,7 @@ export async function GET() {
   }
 
   let token: string;
-  try { token = await getAccessToken(); }
+  try { token = await getAppAccessToken(); }
   catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 
   const env = await getCred("ebay_environment");

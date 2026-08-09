@@ -5,6 +5,21 @@ Format: `## YYYY-MM-DD HH:MM — Task title`
 
 ---
 
+## 2026-08-09 — eBay `sell.logistics` scope granted, deployed, and consented on Mike's user token
+
+**Milestone.** Mike now has full user-token access to eBay's Sell Logistics API on production. This is the two-step completion of the plan from the 2026-08-03 refactor entry.
+
+**Timeline:**
+- 2026-08-08 — eBay Developer Support closed Growth Check ticket #260612-000021: *"Congratulations! Your application has passed eBay's Application Growth Check process for Sell Logistics API. We have granted the Sell Logistics API access for your production App ID (Client ID): MichaelH-CardClou-PRD-22ed07085-28abc59c."*
+- 2026-08-08 — Commit `d240ec2` re-added `"https://api.ebay.com/oauth/api_scope/sell.logistics"` to the `SCOPES` array in `lib/ebay-auth.ts` (immediately after `sell.finances`, before `commerce.message`). One-line net change (added the scope, removed the now-obsolete "requesting this without Developer Program approval will fail" comment block). Pushed to main → Railway auto-deployed clean.
+- 2026-08-09 — Mike clicked Reconnect eBay account in Admin → API Keys → eBay (production panel). eBay's consent screen listed the shipping/logistics permission alongside the existing 7 scopes; Mike accepted. Card Cloud's `prompt=consent` in `buildAuthUrl()` (line 78, `ebay-auth.ts`) is what forced the fresh consent screen — without it, eBay would have silently reused the existing grant and skipped the new scope.
+
+**Verified on dev BEFORE prod deploy** with a throwaway tsx script that called `buildAuthUrl()` and parsed the resulting redirect URL's `scope` parameter: 8 scopes present, `sell.logistics` included, base `oauth/api_scope` absent (correct — that stays on the Client Credentials app token via `getAppAccessToken()`). Prod smoke-checked post-deploy: `/api/health` 200, both admin ebay routes 401 (compile clean).
+
+**Existing behavior unchanged.** The refresh flow at `lib/ebay-auth.ts:161` deliberately does not pass scope on refresh — eBay reuses whatever scopes were granted at the original handshake — so background monitors and cron polling on Mike's OLD refresh token kept working through the entire two-step change. The new scope only became active on the fresh token minted at the 2026-08-09 reconnect.
+
+**Blocked → unblocked:** Step 3 (build `lib/ebay-shipping.ts`) is now ready to start. Design intent: wire the Sell Logistics `shipping_quote` and `shipment` endpoints into the Shipping page's Create Label button, with automatic Standard Envelope selection for eligible orders (US domestic, ≤3oz, ≤$50 declared) and EasyPost fallback for everything else.
+
 ## 2026-08-03 13:00 — eBay OAuth: dropped base `oauth/api_scope` from user flow, Taxonomy calls now use Client Credentials
 
 **Rationale.** eBay Developer Support notified us they will remove `https://api.ebay.com/oauth/api_scope` from the Authorization Code Grant Type flow when they assign us the `sell.logistics` scope (Growth Check ticket #260612-000021, needed for eBay Standard Envelope labels — ~$1.29 for cards under 3oz vs $4+ on other carriers). The base scope stays available via the Client Credentials Grant Type. Card Cloud only needed the base scope for two Commerce Taxonomy metadata calls, so we moved those onto an app-only token and dropped the base scope from the user OAuth request list. Staged before eBay flips the switch (they said "this week") so there is no breakage window.

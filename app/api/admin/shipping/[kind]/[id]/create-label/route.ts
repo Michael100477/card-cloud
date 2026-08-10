@@ -1,18 +1,34 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, AdminError } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { getAccessToken, getEbayConnectionStatus } from "@/lib/ebay-auth";
 import { logger } from "@/lib/logger";
 import { buyLabel, carrierCodeForEbay, computeSupplyCost } from "@/lib/easypost";
+import {
+  buyShippingLabel as buyEbayLabel,
+  estimateStandardEnvelopeWeightOz,
+  evaluateStandardEnvelopeEligibility,
+  getShipFromForEbay,
+  getShippingQuote as getEbayShippingQuote,
+  type EbayContactAddress,
+  type PackageSpec,
+} from "@/lib/ebay-shipping";
 import { decrementShippingSupplies } from "@/lib/shipping-supplies";
 
 /**
- * Create a shipping label for a paid order. Two-step flow:
- *   1. Buy the label via EasyPost (USPS Commercial Plus rates)
- *   2. Tell eBay the order is fulfilled (so eBay emails the buyer with tracking)
+ * Create a shipping label for a paid order.
  *
- * Step 2 fails non-fatally — the label is still saved locally even if eBay
- * notification couldn't be sent; the admin can mark shipped manually later.
+ * Carrier selection (as of 2026-08-10):
+ *   1. If the order qualifies for eBay Standard Envelope (US, <=$20 total,
+ *      <=3 cards, all raw), try that first — ~$1.29 via Sell Logistics API.
+ *      eBay auto-notifies the buyer when the ORDER_ID is linked on the shipment.
+ *   2. Otherwise fall back to EasyPost (USPS Commercial Plus rates) and
+ *      separately POST /sell/fulfillment/v1/.../shipping_fulfillment so
+ *      eBay emails the buyer with tracking.
+ *
+ * The fulfillment notify step (path 2) fails non-fatally — the label is
+ * still saved locally even if eBay's notify couldn't be sent; the admin
+ * can paste tracking into eBay's seller hub manually.
  */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ kind: string; id: string }> }) {
   try { await requireAdmin(); } catch (e) {
@@ -69,26 +85,107 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
   const dimWidth  = Math.max(...allPackages.map(p => p.w));
   const dimHeight = Math.max(...allPackages.map(p => p.h));
 
-  // 2. Buy label via EasyPost
-  let label: Awaited<ReturnType<typeof buyLabel>>;
-  try {
-    label = await buyLabel({
-      to: {
-        name:    record.buyerName    ?? record.buyerUsername ?? "Buyer",
-        street1: addr.street1        ?? "",
-        street2: addr.street2        || undefined,
-        city:    addr.city           ?? "",
-        state:   addr.state          ?? "",
-        zip:     addr.postalCode     ?? "",
-        country: addr.country        ?? "US",
-      },
-      parcel: { length: dimLength, width: dimWidth, height: dimHeight, weight: totalOz },
-      insuranceValue: record.soldPrice ? Number(record.soldPrice) : undefined,
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    logger.error({ category: "shipping", action: "shipping.label.buy.failed", message: msg });
-    return NextResponse.json({ error: msg }, { status: 500 });
+  // 2. Try eBay Standard Envelope first if eligible (~$1.29 for cards <$20,
+  //    <=3 raw cards, US domestic, <=1/4" thickness). Falls through to
+  //    EasyPost for anything that doesn't qualify or if eBay's API errors.
+  const allSiblings = [...internalSiblings, ...consignSiblings];
+  const cardCount = Math.max(allSiblings.length, 1);
+  const allRaw = allSiblings.length > 0 && allSiblings.every(s => s.graded === false);
+  const orderTotalUsd = allSiblings.length > 0
+    ? allSiblings.reduce((sum, s) => sum + Number(s.soldPrice ?? 0), 0)
+    : Number(record.soldPrice ?? 0);
+  const shipToCountry = (addr.country ?? "US").toUpperCase();
+
+  const eligibility = evaluateStandardEnvelopeEligibility({
+    destinationCountryCode: shipToCountry,
+    orderTotalUsd,
+    cardCount,
+    allRaw,
+  });
+
+  type UnifiedLabel = {
+    labelUrl:       string;
+    trackingNumber: string;
+    carrier:        string;
+    service:        string;
+    cost:           number;
+  };
+  let label: UnifiedLabel | null = null;
+  let carrierPath: "ebay-standard-envelope" | "easypost" | null = null;
+  let ebayShipmentId: string | null = null;
+  let ebaySkipReason: string | null = null;
+
+  if (eligibility.eligible) {
+    try {
+      const shipTo: EbayContactAddress = {
+        fullName:        record.buyerName ?? record.buyerUsername ?? "Buyer",
+        addressLine1:    addr.street1     ?? "",
+        addressLine2:    addr.street2     || undefined,
+        city:            addr.city        ?? "",
+        stateOrProvince: addr.state       ?? "",
+        postalCode:      addr.postalCode  ?? "",
+        countryCode:     shipToCountry,
+      };
+      const shipFrom = await getShipFromForEbay();
+
+      // Standard Envelope is a fixed profile: <=1/4" thick, ~9x6 flat mailer.
+      // Weight is set from Mike's rule (1 card = 1oz, 2 = 2oz, 3 = 3oz).
+      const packageSpec: PackageSpec = {
+        weightOz: estimateStandardEnvelopeWeightOz(cardCount),
+        lengthIn: 9,
+        widthIn:  6,
+        heightIn: 0.25,
+      };
+
+      const quote = await getEbayShippingQuote({ shipFrom, shipTo, packageSpec });
+      if (!quote.standardEnvelopeRate) {
+        ebaySkipReason = `eBay returned no Standard Envelope rate (${quote.rates.length} other rates available)`;
+        logger.warn({ category: "shipping", action: "shipping.ebay.envelope.no_rate", message: ebaySkipReason, data: { quoteId: quote.quoteId, raw: quote.raw } });
+      } else {
+        const bought = await buyEbayLabel({
+          rateId:      quote.standardEnvelopeRate.rateId,
+          ebayOrderId: record.ebayOrderId,
+        });
+        label = {
+          labelUrl:       bought.labelDownloadUrl,
+          trackingNumber: bought.trackingNumber,
+          carrier:        "USPS",
+          service:        "eBay Standard Envelope",
+          cost:           bought.actualCostUsd || quote.standardEnvelopeRate.totalCostUsd,
+        };
+        carrierPath    = "ebay-standard-envelope";
+        ebayShipmentId = bought.shipmentId;
+      }
+    } catch (e) {
+      ebaySkipReason = `eBay Standard Envelope attempt errored: ${e instanceof Error ? e.message : String(e)}`;
+      logger.warn({ category: "shipping", action: "shipping.ebay.envelope.error", message: ebaySkipReason });
+    }
+  } else {
+    ebaySkipReason = eligibility.reason;
+  }
+
+  // Fall through to EasyPost if eBay didn't succeed
+  if (!label) {
+    try {
+      label = await buyLabel({
+        to: {
+          name:    record.buyerName    ?? record.buyerUsername ?? "Buyer",
+          street1: addr.street1        ?? "",
+          street2: addr.street2        || undefined,
+          city:    addr.city           ?? "",
+          state:   addr.state          ?? "",
+          zip:     addr.postalCode     ?? "",
+          country: addr.country        ?? "US",
+        },
+        parcel: { length: dimLength, width: dimWidth, height: dimHeight, weight: totalOz },
+        insuranceValue: record.soldPrice ? Number(record.soldPrice) : undefined,
+      });
+      carrierPath = "easypost";
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.error({ category: "shipping", action: "shipping.label.buy.failed", message: msg, data: { ebaySkipReason } });
+      return NextResponse.json({ error: msg, ebaySkipReason }, { status: 500 });
+    }
   }
 
   // 3. Save back to DB and flip status to shipped for EVERY sibling in the
@@ -127,12 +224,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
   await decrementShippingSupplies();
 
   // 5. Tell eBay the order is fulfilled (this notifies the buyer with tracking).
-  // Non-fatal — if this fails the label is already saved and admin can paste
-  // the tracking number into eBay's seller hub manually.
+  //    - EasyPost path: always call (eBay doesn't know about this label yet).
+  //    - eBay Standard Envelope path: skip — the ORDER_ID linked on the shipment
+  //      creation already registered the tracking with eBay automatically.
+  //    Non-fatal — if this fails the label is already saved and the admin can
+  //    paste tracking into eBay's seller hub manually.
   const ebayStatus = await getEbayConnectionStatus();
   let ebayNotified = false;
   let ebayWarning: string | null = null;
-  if (ebayStatus.connected && record.ebayOrderId) {
+  const alreadyNotifiedViaLogistics = carrierPath === "ebay-standard-envelope";
+
+  if (alreadyNotifiedViaLogistics) {
+    ebayNotified = true;   // eBay Sell Logistics auto-notifies when ORDER_ID is linked
+  } else if (ebayStatus.connected && record.ebayOrderId) {
     try {
       const token = await getAccessToken();
       const apiBase = ebayStatus.environment === "production" ? "https://api.ebay.com" : "https://api.sandbox.ebay.com";
@@ -160,14 +264,17 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
   logger.info({
     category: "shipping",
     action:   "shipping.label.created",
-    message:  `Shipping label created via EasyPost: ${label.trackingNumber}`,
+    message:  `Shipping label created via ${carrierPath === "ebay-standard-envelope" ? "eBay Standard Envelope" : "EasyPost"}: ${label.trackingNumber}`,
     data: {
-      ebayOrderId:  record.ebayOrderId,
-      labelUrl:     label.labelUrl,
+      ebayOrderId:    record.ebayOrderId,
+      labelUrl:       label.labelUrl,
       trackingNumber: label.trackingNumber,
-      carrier:      label.carrier,
-      service:      label.service,
-      cost:         label.cost,
+      carrier:        label.carrier,
+      service:        label.service,
+      cost:           label.cost,
+      carrierPath,
+      ebayShipmentId,
+      ebaySkipReason,
       ebayNotified,
     },
   });
@@ -179,6 +286,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
     carrier:          label.carrier,
     service:          label.service,
     cost:             label.cost,
+    carrierPath,        // "ebay-standard-envelope" | "easypost"
+    ebayShipmentId,     // null unless carrierPath === "ebay-standard-envelope"
+    ebaySkipReason,     // populated when we fell back to EasyPost — tells the admin why
     ebayNotified,
     ebayWarning,
   });

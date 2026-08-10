@@ -137,7 +137,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
         heightIn: 0.25,
       };
 
-      const quote = await getEbayShippingQuote({ shipFrom, shipTo, packageSpec });
+      const quote = await getEbayShippingQuote({ shipFrom, shipTo, packageSpec, ebayOrderId: record.ebayOrderId });
       if (!quote.standardEnvelopeRate) {
         ebaySkipReason = `eBay returned no Standard Envelope rate (${quote.rates.length} other rates available)`;
         logger.warn({ category: "shipping", action: "shipping.ebay.envelope.no_rate", message: ebaySkipReason, data: { quoteId: quote.quoteId, raw: quote.raw } });

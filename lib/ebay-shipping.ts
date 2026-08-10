@@ -147,12 +147,16 @@ export async function getShippingQuote(params: {
   shipFrom:    EbayContactAddress;
   shipTo:      EbayContactAddress;
   packageSpec: PackageSpec;
+  /** Required by eBay: the order this quote is for. Standard Envelope
+   *  eligibility is determined per-order (declared value, item category). */
+  ebayOrderId: string;
 }): Promise<ShippingQuote> {
   const apiBase = await getApiBase();
   const token   = await getAccessToken();
 
   const body = {
     accountCurrencyCode: "USD",
+    orders: [{ orderId: params.ebayOrderId }],
     shipFrom: contactBlock(params.shipFrom),
     shipTo:   contactBlock(params.shipTo),
     packageSpecifications: {

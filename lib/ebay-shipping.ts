@@ -160,7 +160,11 @@ export async function getShippingQuote(params: {
     shipFrom: contactBlock(params.shipFrom),
     shipTo:   contactBlock(params.shipTo),
     packageSpecification: {
-      packageType: "PACKAGE",
+      // Declaring the package type as USPS_LETTER lets eBay return the
+      // Standard Envelope rate. The generic "PACKAGE" type returns only
+      // parcel services (Ground Advantage / Priority / UPS / etc.) and
+      // never includes Standard Envelope even for cards ≤3oz / ≤¼" thick.
+      packageType: "USPS_LETTER",
       weight:     { value: params.packageSpec.weightOz, unit: "OUNCE" },
       dimensions: {
         length: params.packageSpec.lengthIn,
@@ -184,7 +188,10 @@ export async function getShippingQuote(params: {
   type RawRate = {
     rateId?: string;
     shippingCarrierCode?: string;
-    serviceType?: string;
+    shippingCarrierName?: string;
+    shippingServiceCode?: string;
+    shippingServiceName?: string;
+    shippingPackageCode?: string;
     additionalOptions?: unknown;
     baseShippingCost?:  { value?: string | number; currency?: string };
     totalShippingCost?: { value?: string | number; currency?: string };
@@ -193,8 +200,8 @@ export async function getShippingQuote(params: {
   const rates: EbayRate[] = (Array.isArray(raw.rates) ? raw.rates : []).map((rate: RawRate) => ({
     rateId:          rate.rateId ?? "",
     shippingCarrier: rate.shippingCarrierCode ?? "USPS",
-    serviceType:     rate.serviceType ?? "",
-    serviceLabel:    rate.serviceType ?? "",   // eBay's beta responses don't always include a friendly label
+    serviceType:     rate.shippingServiceCode ?? "",
+    serviceLabel:    rate.shippingServiceName ?? rate.shippingServiceCode ?? "",
     baseCostUsd:     parseFloat(String(rate.baseShippingCost?.value  ?? rate.totalShippingCost?.value ?? "0")),
     totalCostUsd:    parseFloat(String(rate.totalShippingCost?.value ?? rate.baseShippingCost?.value  ?? "0")),
     raw:             rate,

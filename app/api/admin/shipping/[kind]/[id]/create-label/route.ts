@@ -128,15 +128,15 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
       };
       const shipFrom = await getShipFromForEbay();
 
-      // eBay Standard Envelope has strict fixed dimensions — 11 × 6 × 0.25 inches
-      // (per eBay's spec; other dimensions cause ESE to silently NOT appear in
-      // the shipping_quote response). Weight follows Mike's rule: 1 card = 1oz,
-      // 2 cards = 2oz, 3 cards = 3oz.
+      // Dimensions match what the eBay Seller Hub UI uses for a typical
+      // sleeved+toploader card mailer (10 × 4 × 1). Verified 2026-08-10:
+      // ESE quote at $0.78 appears in the Hub UI at these exact dims.
+      // Weight follows Mike's rule: 1 card = 1oz, 2 cards = 2oz, 3 cards = 3oz.
       const packageSpec: PackageSpec = {
         weightOz: estimateStandardEnvelopeWeightOz(cardCount),
-        lengthIn: 11,
-        widthIn:  6,
-        heightIn: 0.25,
+        lengthIn: 10,
+        widthIn:  4,
+        heightIn: 1,
       };
 
       const quote = await getEbayShippingQuote({ shipFrom, shipTo, packageSpec, ebayOrderId: record.ebayOrderId });

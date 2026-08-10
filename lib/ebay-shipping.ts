@@ -160,16 +160,14 @@ export async function getShippingQuote(params: {
     shipFrom: contactBlock(params.shipFrom),
     shipTo:   contactBlock(params.shipTo),
     packageSpecification: {
-      packages: [{
-        packageType: "PACKAGE",
-        weight:     { value: params.packageSpec.weightOz, unit: "OUNCE" },
-        dimensions: {
-          length: params.packageSpec.lengthIn,
-          width:  params.packageSpec.widthIn,
-          height: params.packageSpec.heightIn,
-          unit:   "INCH",
-        },
-      }],
+      packageType: "PACKAGE",
+      weight:     { value: params.packageSpec.weightOz, unit: "OUNCE" },
+      dimensions: {
+        length: params.packageSpec.lengthIn,
+        width:  params.packageSpec.widthIn,
+        height: params.packageSpec.heightIn,
+        unit:   "INCH",
+      },
     },
   };
 
@@ -180,7 +178,7 @@ export async function getShippingQuote(params: {
   });
   const raw = await r.json();
   if (!r.ok) {
-    throw new Error(`eBay shipping_quote failed (${r.status}): ${JSON.stringify(raw).slice(0, 500)}`);
+    throw new Error(`eBay shipping_quote failed (${r.status}): ${JSON.stringify(raw).slice(0, 2000)}`);
   }
 
   type RawRate = {
@@ -263,7 +261,7 @@ export async function buyShippingLabel(params: {
   });
   const raw = await r.json();
   if (!r.ok) {
-    throw new Error(`eBay shipment create failed (${r.status}): ${JSON.stringify(raw).slice(0, 500)}`);
+    throw new Error(`eBay shipment create failed (${r.status}): ${JSON.stringify(raw).slice(0, 2000)}`);
   }
 
   type Label = { downloadUrl?: string; labelDownloadUrl?: string; labelFormat?: string };

@@ -159,7 +159,7 @@ export async function getShippingQuote(params: {
     orders: [{ orderId: params.ebayOrderId }],
     shipFrom: contactBlock(params.shipFrom),
     shipTo:   contactBlock(params.shipTo),
-    packageSpecifications: {
+    packageSpecification: {
       packages: [{
         packageType: "PACKAGE",
         weight:     { value: params.packageSpec.weightOz, unit: "OUNCE" },

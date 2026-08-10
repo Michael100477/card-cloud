@@ -32,12 +32,13 @@ export interface EbayContactAddress {
   stateOrProvince: string;
   postalCode:      string;
   countryCode:     string;   // ISO 3166-1 alpha-2
-  phoneNumber?:    string;
+  county:          string;   // REQUIRED by eBay's ContactAddress schema (US county name; empty string OK)
+  phoneNumber:     string;   // REQUIRED by eBay's Contact schema (use placeholder if unknown)
 }
 
 /** Read Card Cloud's ship-from credentials and return an eBay-shaped address. */
 export async function getShipFromForEbay(): Promise<EbayContactAddress> {
-  const [name, street1, street2, city, state, zip, country, phone] = await Promise.all([
+  const [name, street1, street2, city, state, zip, country, phone, county] = await Promise.all([
     getCred("shipfrom_name"),
     getCred("shipfrom_street1"),
     getCred("shipfrom_street2"),
@@ -46,6 +47,7 @@ export async function getShipFromForEbay(): Promise<EbayContactAddress> {
     getCred("shipfrom_zip"),
     getCred("shipfrom_country"),
     getCred("shipfrom_phone"),
+    getCred("shipfrom_county"),
   ]);
   const missing = [!name && "Name", !street1 && "Street 1", !city && "City", !state && "State", !zip && "ZIP"]
     .filter(Boolean) as string[];
@@ -60,7 +62,8 @@ export async function getShipFromForEbay(): Promise<EbayContactAddress> {
     stateOrProvince: state!,
     postalCode:      zip!,
     countryCode:     (country || "US").toUpperCase(),
-    phoneNumber:     phone || undefined,
+    county:          county || "",   // eBay requires the field but accepts empty
+    phoneNumber:     phone || "0000000000",
   };
 }
 
@@ -154,18 +157,20 @@ export async function getShippingQuote(params: {
   const apiBase = await getApiBase();
   const token   = await getAccessToken();
 
+  // Body shape follows eBay's ShippingQuoteRequest spec exactly:
+  //   required: orders[], packageSpecification, shipFrom, shipTo
+  // Order.channel is required and currently only "EBAY" is supported.
+  // packageSpecification only has weight + dimensions (no packageType field).
   const body = {
-    accountCurrencyCode: "USD",
-    orders: [{ orderId: params.ebayOrderId }],
+    orders: [{ channel: "EBAY", orderId: params.ebayOrderId }],
     shipFrom: contactBlock(params.shipFrom),
     shipTo:   contactBlock(params.shipTo),
     packageSpecification: {
-      packageType: "PACKAGE",
-      weight:     { value: params.packageSpec.weightOz, unit: "OUNCE" },
+      weight:     { value: String(params.packageSpec.weightOz), unit: "OUNCE" },
       dimensions: {
-        length: params.packageSpec.lengthIn,
-        width:  params.packageSpec.widthIn,
-        height: params.packageSpec.heightIn,
+        length: String(params.packageSpec.lengthIn),
+        width:  String(params.packageSpec.widthIn),
+        height: String(params.packageSpec.heightIn),
         unit:   "INCH",
       },
     },
@@ -173,8 +178,12 @@ export async function getShippingQuote(params: {
 
   const r = await fetch(`${apiBase}/sell/logistics/v1_beta/shipping_quote`, {
     method:  "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body:    JSON.stringify(body),
+    headers: {
+      Authorization:              `Bearer ${token}`,
+      "Content-Type":             "application/json",
+      "X-EBAY-C-MARKETPLACE-ID":  "EBAY_US",
+    },
+    body: JSON.stringify(body),
   });
   const raw = await r.json();
   if (!r.ok) {
@@ -219,10 +228,11 @@ function contactBlock(addr: EbayContactAddress) {
       city:            addr.city,
       stateOrProvince: addr.stateOrProvince,
       postalCode:      addr.postalCode,
+      county:          addr.county,       // required by ContactAddress schema
       countryCode:     addr.countryCode,
     },
-    fullName: addr.fullName,
-    ...(addr.phoneNumber && { primaryPhone: { phoneNumber: addr.phoneNumber } }),
+    fullName:     addr.fullName,
+    primaryPhone: { phoneNumber: addr.phoneNumber },   // required by Contact schema
   };
 }
 
@@ -238,56 +248,60 @@ export interface BoughtShipment {
   raw:              unknown;
 }
 
-/** Commit to a rate on a previously-created quote and buy the label. */
+/** Commit to a rate on a previously-created quote and buy the label.
+ *  Per spec, body only needs rateId + shippingQuoteId. Order linkage is
+ *  implicit via the quote (which was created with the orders[] array).
+ *  Endpoint is /shipment/create_from_shipping_quote (not /shipment).
+ */
 export async function buyShippingLabel(params: {
-  rateId:  string;
-  /** Optional: eBay order ID to link the shipment to for auto-fulfillment (buyer notification). */
-  ebayOrderId?: string;
+  rateId:          string;
+  shippingQuoteId: string;
 }): Promise<BoughtShipment> {
   const apiBase = await getApiBase();
   const token   = await getAccessToken();
 
-  const body: Record<string, unknown> = {
-    rateId: params.rateId,
-    labelSize: "4x6",
-    ...(params.ebayOrderId && {
-      additionalOptions: [
-        { optionType: "ORDER_ID", optionValue: params.ebayOrderId },
-      ],
-    }),
+  const body = {
+    rateId:          params.rateId,
+    shippingQuoteId: params.shippingQuoteId,
+    labelSize:       "4x6",
   };
 
-  const r = await fetch(`${apiBase}/sell/logistics/v1_beta/shipment`, {
+  const r = await fetch(`${apiBase}/sell/logistics/v1_beta/shipment/create_from_shipping_quote`, {
     method:  "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body:    JSON.stringify(body),
+    headers: {
+      Authorization:              `Bearer ${token}`,
+      "Content-Type":             "application/json",
+      "X-EBAY-C-MARKETPLACE-ID":  "EBAY_US",
+    },
+    body: JSON.stringify(body),
   });
   const raw = await r.json();
   if (!r.ok) {
     throw new Error(`eBay shipment create failed (${r.status}): ${JSON.stringify(raw).slice(0, 2000)}`);
   }
 
-  type Label = { downloadUrl?: string; labelDownloadUrl?: string; labelFormat?: string };
-  const label: Label = Array.isArray(raw.labels) && raw.labels.length > 0 ? raw.labels[0] : {};
-
+  // Per spec, Shipment response has: shipmentId, shipmentTrackingNumber,
+  // labelDownloadUrl (direct string, not wrapped in a labels[] array), and
+  // rate.baseShippingCost / rate.totalShippingCost.
+  const cost = raw.rate?.totalShippingCost?.value ?? raw.rate?.baseShippingCost?.value ?? "0";
   return {
     shipmentId:       raw.shipmentId ?? "",
-    trackingNumber:   raw.shipmentTrackingNumber ?? raw.trackingNumber ?? "",
-    labelDownloadUrl: label.downloadUrl ?? label.labelDownloadUrl ?? raw.labelDownloadUrl ?? "",
-    actualCostUsd:    parseFloat(String(raw.shippingCost?.baseCharge?.value ?? raw.totalShippingCost?.value ?? "0")),
-    serviceType:      raw.serviceType ?? "",
-    carrier:          raw.shippingCarrierCode ?? "USPS",
+    trackingNumber:   raw.shipmentTrackingNumber ?? "",
+    labelDownloadUrl: raw.labelDownloadUrl ?? "",
+    actualCostUsd:    parseFloat(String(cost)),
+    serviceType:      raw.rate?.shippingServiceCode ?? "",
+    carrier:          raw.rate?.shippingCarrierCode ?? "USPS",
     raw,
   };
 }
 
 // ── Label PDF/PNG download ───────────────────────────────────────────────
 
-export async function getLabelBinary(shipmentId: string, format: "PDF" | "PNG" = "PDF"): Promise<Buffer> {
+export async function getLabelBinary(shipmentId: string): Promise<Buffer> {
   const apiBase = await getApiBase();
   const token   = await getAccessToken();
-  const r = await fetch(`${apiBase}/sell/logistics/v1_beta/shipment/${shipmentId}/shipping_label`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: format === "PDF" ? "application/pdf" : "image/png" },
+  const r = await fetch(`${apiBase}/sell/logistics/v1_beta/shipment/${shipmentId}/download_label_file`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/pdf" },
   });
   if (!r.ok) {
     const body = await r.text();
@@ -303,7 +317,7 @@ export async function voidShippingLabel(shipmentId: string): Promise<void> {
   const token   = await getAccessToken();
   const r = await fetch(`${apiBase}/sell/logistics/v1_beta/shipment/${shipmentId}/cancel`, {
     method:  "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, "X-EBAY-C-MARKETPLACE-ID": "EBAY_US" },
   });
   if (!r.ok) {
     const body = await r.text();

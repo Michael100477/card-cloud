@@ -49,7 +49,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
   if (!record.ebayOrderId)  return NextResponse.json({ error: "No eBay order ID on record yet — try again in a minute after the order sync runs." }, { status: 400 });
   if (!record.buyerAddress) return NextResponse.json({ error: "No buyer address on record yet — try again in a minute after the order sync runs." }, { status: 400 });
 
-  type Addr = { street1?: string; street2?: string; city?: string; state?: string; postalCode?: string; country?: string };
+  type Addr = { street1?: string; street2?: string; city?: string; state?: string; postalCode?: string; country?: string; county?: string; phone?: string };
   const addr = record.buyerAddress as Addr;
 
   // Find every sibling listing in the same eBay order so a multi-item
@@ -125,6 +125,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
         stateOrProvince: addr.state       ?? "",
         postalCode:      addr.postalCode  ?? "",
         countryCode:     shipToCountry,
+        county:          addr.county      ?? "",
+        phoneNumber:     addr.phone       ?? "0000000000",
       };
       const shipFrom = await getShipFromForEbay();
 
@@ -146,8 +148,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
         logger.warn({ category: "shipping", action: "shipping.ebay.envelope.no_rate", message: ebaySkipReason, data: { quoteId: quote.quoteId, raw: quote.raw } });
       } else {
         const bought = await buyEbayLabel({
-          rateId:      quote.standardEnvelopeRate.rateId,
-          ebayOrderId: record.ebayOrderId,
+          rateId:          quote.standardEnvelopeRate.rateId,
+          shippingQuoteId: quote.quoteId,
         });
         label = {
           labelUrl:       bought.labelDownloadUrl,

@@ -139,8 +139,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
 
       const quote = await getEbayShippingQuote({ shipFrom, shipTo, packageSpec, ebayOrderId: record.ebayOrderId });
       if (!quote.standardEnvelopeRate) {
-        const rateSummary = quote.rates.map(r => `${r.serviceType || "(no serviceType)"}[$${r.totalCostUsd.toFixed(2)}]`).join(", ");
-        ebaySkipReason = `eBay returned no Standard Envelope rate. Rates offered: ${rateSummary}`;
+        const firstRateRaw = JSON.stringify(quote.rates[0]?.raw ?? {}).slice(0, 800);
+        ebaySkipReason = `eBay returned no Standard Envelope rate. ${quote.rates.length} rates offered. First rate raw JSON: ${firstRateRaw}`;
         logger.warn({ category: "shipping", action: "shipping.ebay.envelope.no_rate", message: ebaySkipReason, data: { quoteId: quote.quoteId, raw: quote.raw } });
       } else {
         const bought = await buyEbayLabel({

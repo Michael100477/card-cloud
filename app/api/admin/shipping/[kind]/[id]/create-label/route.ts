@@ -128,11 +128,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ ki
       };
       const shipFrom = await getShipFromForEbay();
 
-      // Standard Envelope is a fixed profile: <=1/4" thick, ~9x6 flat mailer.
-      // Weight is set from Mike's rule (1 card = 1oz, 2 = 2oz, 3 = 3oz).
+      // eBay Standard Envelope has strict fixed dimensions — 11 × 6 × 0.25 inches
+      // (per eBay's spec; other dimensions cause ESE to silently NOT appear in
+      // the shipping_quote response). Weight follows Mike's rule: 1 card = 1oz,
+      // 2 cards = 2oz, 3 cards = 3oz.
       const packageSpec: PackageSpec = {
         weightOz: estimateStandardEnvelopeWeightOz(cardCount),
-        lengthIn: 9,
+        lengthIn: 11,
         widthIn:  6,
         heightIn: 0.25,
       };

@@ -160,11 +160,7 @@ export async function getShippingQuote(params: {
     shipFrom: contactBlock(params.shipFrom),
     shipTo:   contactBlock(params.shipTo),
     packageSpecification: {
-      // Declaring the package type as USPS_LETTER lets eBay return the
-      // Standard Envelope rate. The generic "PACKAGE" type returns only
-      // parcel services (Ground Advantage / Priority / UPS / etc.) and
-      // never includes Standard Envelope even for cards ≤3oz / ≤¼" thick.
-      packageType: "USPS_LETTER",
+      packageType: "PACKAGE",
       weight:     { value: params.packageSpec.weightOz, unit: "OUNCE" },
       dimensions: {
         length: params.packageSpec.lengthIn,
